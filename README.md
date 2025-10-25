@@ -1,127 +1,408 @@
-# UPA Patient Flow Simulator
+# Simulador de Fluxo de Pacientes - Protocolo de Manchester
 
-Simulador de fluxo de pacientes para UPAs de Campina Grande - PB, implementando o **Protocolo de Manchester** para gestão de filas por prioridade.
+Sistema de simulação para validação do fluxo de pacientes em Unidades de Pronto Atendimento (UPAs) de Campina Grande - PB, com implementação completa do Protocolo de Manchester para gestão de filas por classificação de risco.
 
-## 📋 Índice
+---
 
-- [Visão Geral](#visão-geral)
-- [Protocolo de Manchester](#protocolo-de-manchester)
+## Sumário
+
+- [Introdução](#introdução)
+- [Fundamentação Teórica](#fundamentação-teórica)
+- [Arquitetura do Sistema](#arquitetura-do-sistema)
 - [Requisitos](#requisitos)
 - [Instalação](#instalação)
 - [Configuração](#configuração)
 - [Execução](#execução)
-- [Logs e Monitoramento](#logs-e-monitoramento)
-- [Execução em Servidor (24/7)](#execução-em-servidor-247)
+- [Monitoramento](#monitoramento)
+- [Implantação em Produção](#implantação-em-produção)
+- [Validação e Testes](#validação-e-testes)
 - [Troubleshooting](#troubleshooting)
+- [Referências](#referências)
 
 ---
 
-## 🎯 Visão Geral
+## Introdução
 
-Este simulador reproduz o fluxo completo de pacientes em Unidades de Pronto Atendimento (UPAs), desde a entrada até a finalização do atendimento, respeitando o Protocolo de Manchester de triagem.
+Este simulador foi desenvolvido como ferramenta de validação para sistemas de gestão de UPAs, reproduzindo o fluxo completo de pacientes desde a entrada até a finalização do atendimento. O sistema implementa fielmente o Protocolo de Manchester de classificação de risco, conforme adotado pelas UPAs de Campina Grande - PB.
 
-### Funcionalidades
+### Objetivos
 
-- ✅ Simulação de entrada contínua de pacientes
-- ✅ Implementação completa do Protocolo de Manchester (4 níveis)
-- ✅ Gestão de filas por prioridade
-- ✅ Integração com serviço de monitoramento via API REST
-- ✅ Configuração flexível de fluxo por UPA (por minuto/hora/dia)
-- ✅ Logs detalhados com rotação automática
-- ✅ Estatísticas em tempo real
-- ✅ Execução 24/7 com tratamento de erros robusto
+1. Simular o fluxo contínuo de pacientes em ambiente de urgência e emergência
+2. Validar a implementação do Protocolo de Manchester em sistemas de gestão
+3. Gerar dados realistas para análise de desempenho e dimensionamento de recursos
+4. Fornecer ambiente de testes para sistemas de monitoramento de UPAs
 
-### Fluxo Simulado
+### Funcionalidades Principais
+
+- Simulação de entrada contínua de pacientes com distribuição configurável
+- Implementação do Protocolo de Manchester (4 níveis de classificação)
+- Gestão de filas priorizadas em todas as etapas do fluxo
+- Integração via API REST com serviços de monitoramento
+- Sistema de logs com rotação automática
+- Estatísticas em tempo real
+- Execução 24/7 com tratamento robusto de erros
+
+---
+
+## Fundamentação Teórica
+
+### Protocolo de Manchester
+
+O Protocolo de Manchester é um sistema de triagem e classificação de risco amplamente utilizado em serviços de urgência e emergência. Desenvolvido no Manchester Royal Infirmary (Reino Unido) em 1994, o protocolo estabelece prioridades de atendimento baseadas na gravidade clínica do paciente, não na ordem de chegada.
+
+#### Classificações Implementadas (Campina Grande - PB)
+
+| Classificação | Prioridade | Tempo Máximo de Espera | Descrição |
+|--------------|------------|------------------------|-----------|
+| VERMELHO | 1 | 0 minutos | Emergência - Risco iminente de vida |
+| AMARELO | 2 | 60 minutos | Muito urgente - Risco potencial de vida |
+| VERDE | 3 | 120 minutos | Urgente - Necessita atendimento, sem risco imediato |
+| AZUL | 4 | 240 minutos | Pouco urgente - Condições clínicas estáveis |
+
+**Nota**: O sistema não implementa a classificação LARANJA, conforme especificação das UPAs de Campina Grande - PB.
+
+### Diferença entre FIFO e Classificação de Risco
+
+**FIFO (First In, First Out)**: Sistema tradicional onde pacientes são atendidos na ordem de chegada.
+
+**Protocolo de Manchester**: Sistema que prioriza pacientes por gravidade clínica. Um paciente classificado como VERMELHO que chega às 10:30 será atendido antes de um paciente AZUL que chegou às 10:00.
+
+**Importante**: As UPAs que implementam o Protocolo de Manchester **não utilizam FIFO em nenhuma etapa do fluxo**. A priorização por gravidade ocorre desde a recepção até o atendimento médico final.
+
+---
+
+## Arquitetura do Sistema
+
+### Visão Geral
 
 ```
-Entrada → Fila de Triagem → Triagem (classificação) → Fila de Atendimento (priorizada) → Atendimento → Finalização
+┌─────────────────────────────────────────────────────────────────┐
+│                     UPA SIMULATOR (Python)                      │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐     │
+│  │   Entry      │    │   Triagem    │    │ Atendimento  │     │
+│  │   Threads    │───▶│   Processor  │───▶│  Processor   │     │
+│  │  (por UPA)   │    │   Thread     │    │   Thread     │     │
+│  └──────────────┘    └──────────────┘    └──────────────┘     │
+│         │                   │                    │             │
+│         ▼                   ▼                    ▼             │
+│  ┌──────────────────────────────────────────────────────┐     │
+│  │           PriorityQueues (Thread-Safe)               │     │
+│  │  • Fila Triagem (priorizada)                         │     │
+│  │  • Fila Atendimento (priorizada)                     │     │
+│  └──────────────────────────────────────────────────────┘     │
+│         │                   │                    │             │
+│         └───────────────────┴────────────────────┘             │
+│                            │                                   │
+│                            ▼                                   │
+│                    ┌──────────────┐                            │
+│                    │  Monitoring  │                            │
+│                    │    Thread    │                            │
+│                    └──────────────┘                            │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+         │                            │
+         ▼                            ▼
+┌──────────────────┐        ┌──────────────────┐
+│  Gateway Service │        │ Monitoring Service│
+│   (porta 8084)   │        │   (porta 8086)    │
+└──────────────────┘        └──────────────────┘
+```
+
+### Componentes Principais
+
+#### 1. Classes de Dados
+
+**ClassificacaoTriagem (Enum)**
+- Define os 4 níveis do Protocolo de Manchester
+- Armazena prioridade, tempo máximo de espera e descrição
+
+**Patient (dataclass)**
+- Representa um paciente com todos os atributos e timestamps
+- Implementa `__lt__` para ordenação em PriorityQueue
+
+**UPAConfig (dataclass)**
+- Configuração de cada UPA (fluxo, bairros, distribuições)
+
+#### 2. Cliente HTTP (APIClient)
+
+- Baseado em `requests.Session`
+- Retry automático com backoff exponencial
+- Timeout configurável (padrão: 10 segundos)
+- Tratamento de erros HTTP
+
+#### 3. Simulador Principal (UPASimulator)
+
+**Threads de Processamento**:
+
+1. **Entry Threads** (uma por UPA): Gera pacientes em intervalos configurados
+2. **Triagem Processor Thread**: Processa fila de triagem priorizada
+3. **Atendimento Processor Thread**: Processa fila de atendimento priorizada
+4. **Monitor Thread**: Coleta e exibe estatísticas a cada 60 segundos
+
+**Sincronização Thread-Safe**:
+- Locks individuais para cada fila de triagem
+- Locks individuais para cada fila de atendimento
+- Lock global para dicionário de pacientes ativos
+- Double-check pattern para evitar race conditions
+
+### Fluxo de Dados
+
+```
+1. Entrada
+   └─> Paciente criado com pré-classificação (baseada em sintomas relatados)
+   └─> Registrado via API (POST /api/v1/events/entrada)
+   └─> Adicionado à PriorityQueue de triagem
+
+2. Triagem
+   └─> Paciente removido da fila por prioridade (VERMELHO primeiro)
+   └─> Triagem detalhada (180-600 segundos simulados)
+   └─> 85% mantém classificação, 15% são reclassificados
+   └─> Registrado via API (POST /api/v1/events/triagem)
+   └─> Adicionado à PriorityQueue de atendimento
+
+3. Atendimento
+   └─> Paciente removido da fila por prioridade
+   └─> Verificação de tempo de espera vs. limite do protocolo
+   └─> Atendimento médico (tempo varia por classificação)
+   └─> Registrado via API (POST /api/v1/events/atendimento)
+   └─> Paciente finalizado e removido do sistema
 ```
 
 ---
 
-## 🏥 Protocolo de Manchester
+## Requisitos
 
-O simulador implementa os 4 níveis de classificação do Protocolo de Manchester:
-
-| Classificação | Prioridade | Tempo Máx. Espera | Descrição |
-|--------------|------------|-------------------|-----------|
-| 🔴 VERMELHO | 1 (mais urgente) | 0 minutos | Emergência - Atendimento imediato |
-| 🟡 AMARELO | 2 | 60 minutos | Muito urgente |
-| 🟢 VERDE | 3 | 120 minutos | Urgente |
-| 🔵 AZUL | 4 (menos urgente) | 240 minutos | Pouco urgente |
-
-### Gestão de Filas
-
-- **Fila de Triagem**: FIFO (First In, First Out)
-- **Fila de Atendimento**: Ordenada por prioridade (Vermelho → Amarelo → Verde → Azul)
-- **Alertas**: O sistema emite alertas quando pacientes excedem o tempo máximo de espera
-
----
-
-## 💻 Requisitos
+### Requisitos de Software
 
 - **Python**: 3.8 ou superior
-- **Serviços**:
-  - Serviço Monitoring rodando (porta 8086)
-  - Serviço Gateway rodando (porta 8084)
-  - Banco de dados PostgreSQL populado com UPAs
+- **Dependências Python**:
+  - `requests >= 2.31.0` - Cliente HTTP
+  - `urllib3 >= 2.0.0` - Conexões HTTP
+  - `typing-extensions >= 4.8.0` - Type hints
+
+### Requisitos de Infraestrutura
+
+- **Gateway Service**: Servidor rodando na porta 8084
+  - Endpoint: `GET /api/v1/upas` (lista de UPAs)
+
+- **Monitoring Service**: Servidor rodando na porta 8086
+  - Endpoint: `POST /api/v1/events/entrada`
+  - Endpoint: `POST /api/v1/events/triagem`
+  - Endpoint: `POST /api/v1/events/atendimento`
+
+- **Banco de Dados**: PostgreSQL com dados das UPAs
+
+### Requisitos de Sistema
+
+- **CPU**: Mínimo 2 cores (recomendado 4 cores para múltiplas UPAs)
+- **Memória RAM**: Mínimo 512 MB (recomendado 1 GB)
+- **Disco**: 1 GB para logs e ambiente virtual
+- **Rede**: Acesso HTTP aos serviços Gateway e Monitoring
 
 ---
 
-## 📦 Instalação
+## Instalação
 
-### 1. Clonar/Copiar arquivos
-
-Certifique-se de ter os seguintes arquivos no servidor:
-
-```
-/opt/upa-simulator/
-├── upa_simulator.py
-├── config.json
-├── requirements.txt
-└── SIMULATOR_README.md
-```
-
-### 2. Criar ambiente virtual (recomendado)
+### 1. Clonar o Repositório
 
 ```bash
-cd /opt/upa-simulator
+git clone <url-do-repositorio>
+cd SCRIPT-UPA-SIMULATOR
+```
+
+### 2. Criar Arquivo de Configuração
+
+O arquivo `config.json` não está versionado no Git por conter informações sensíveis. Crie-o a partir do template:
+
+```bash
+cp config.examples.json config.json
+```
+
+### 3. Configurar Ambiente Virtual Python
+
+**Linux/macOS**:
+```bash
 python3 -m venv venv
-source venv/bin/activate  # Linux/Mac
-# ou
-venv\Scripts\activate  # Windows
+source venv/bin/activate
 ```
 
-### 3. Instalar dependências
+**Windows**:
+```bash
+python -m venv venv
+venv\Scripts\activate
+```
+
+### 4. Instalar Dependências
 
 ```bash
+pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
+### 5. Verificar Instalação
+
+```bash
+python -c "import requests; print('Dependências OK')"
+python -m py_compile upa_simulator.py
+```
+
+Se não houver erros, a instalação foi bem-sucedida.
+
 ---
 
-## ⚙️ Configuração
+## Configuração
 
-Edite o arquivo `config.json` para ajustar os parâmetros da simulação.
-
-### Configurações Principais
-
-#### 1. URLs dos Serviços
+### Estrutura do Arquivo `config.json`
 
 ```json
 {
   "monitoring_service": {
-    "base_url": "http://localhost:8086"
+    "base_url": "http://localhost:8086",
+    "endpoints": {
+      "entrada": "/api/v1/events/entrada",
+      "triagem": "/api/v1/events/triagem",
+      "atendimento": "/api/v1/events/atendimento"
+    }
   },
   "gateway_service": {
-    "base_url": "http://localhost:8084"
+    "base_url": "http://localhost:8084",
+    "endpoints": {
+      "upas": "/api/v1/upas"
+    }
+  },
+  "upas": {
+    "UPA Dinamérica": {
+      "enabled": true,
+      "patient_flow": {
+        "mode": "per_hour",
+        "rate": 12
+      },
+      "bairros": ["Dinamérica", "Malvinas", "..."],
+      "classificacao_distribution": {
+        "VERMELHO": 0.05,
+        "AMARELO": 0.25,
+        "VERDE": 0.50,
+        "AZUL": 0.20
+      }
+    }
+  },
+  "simulation": {
+    "real_time_factor": 1.0,
+    "triagem_time_seconds": {
+      "min": 180,
+      "max": 600
+    },
+    "atendimento_time_seconds": {
+      "VERMELHO": {"min": 1200, "max": 3600},
+      "AMARELO": {"min": 900, "max": 2400},
+      "VERDE": {"min": 600, "max": 1800},
+      "AZUL": {"min": 300, "max": 1200}
+    },
+    "logging": {
+      "level": "INFO",
+      "file": "upa_simulator.log",
+      "max_bytes": 10485760,
+      "backup_count": 5
+    }
   }
 }
 ```
 
-**Importante**: Se estiver rodando no servidor, use o IP do servidor ou `localhost`.
+### Parâmetros de Configuração
 
-#### 2. Configuração de Fluxo por UPA
+#### URLs dos Serviços
+
+**monitoring_service.base_url**: URL base do serviço de monitoramento
+- Exemplo: `http://localhost:8086`
+- Em produção: `http://<ip-servidor>:8086`
+
+**gateway_service.base_url**: URL base do gateway
+- Exemplo: `http://localhost:8084`
+- Em produção: `http://<ip-servidor>:8084`
+
+#### Configuração de Fluxo de Pacientes
+
+**patient_flow.mode**: Define a unidade de tempo para taxa de entrada
+- `per_minute`: Taxa por minuto (ex: `"rate": 2` = 2 pacientes/minuto = 1 a cada 30s)
+- `per_hour`: Taxa por hora (ex: `"rate": 12` = 12 pacientes/hora = 1 a cada 5min)
+- `per_day`: Taxa por dia (ex: `"rate": 288` = 288 pacientes/dia = 1 a cada 5min)
+
+**patient_flow.rate**: Número de pacientes no período definido
+
+**Cálculo do intervalo**:
+```python
+if mode == "per_minute":
+    intervalo = 60 / rate  # segundos
+elif mode == "per_hour":
+    intervalo = 3600 / rate  # segundos
+elif mode == "per_day":
+    intervalo = 86400 / rate  # segundos
+```
+
+#### Distribuição de Classificações
+
+**classificacao_distribution**: Probabilidade de cada classificação
+- A soma de todas as probabilidades deve ser **exatamente 1.0** (100%)
+- Baseado em dados reais das UPAs de Campina Grande - PB
+
+**Exemplo**:
+```json
+"classificacao_distribution": {
+  "VERMELHO": 0.05,  // 5% dos pacientes
+  "AMARELO": 0.25,   // 25% dos pacientes
+  "VERDE": 0.50,     // 50% dos pacientes
+  "AZUL": 0.20       // 20% dos pacientes
+}
+// Total: 1.00 (100%)
+```
+
+#### Fator de Velocidade da Simulação
+
+**real_time_factor**: Multiplicador de velocidade
+- `1.0`: Tempo real (padrão)
+- `2.0`: 2x mais rápido (útil para testes)
+- `0.5`: 2x mais lento (útil para debug)
+- `10.0`: 10x mais rápido (testes intensivos)
+
+**Impacto**:
+```python
+tempo_simulado = tempo_configurado / real_time_factor
+```
+
+#### Tempos de Processamento
+
+**triagem_time_seconds**: Tempo de triagem (em segundos)
+- `min`: Tempo mínimo (recomendado: 180s = 3 minutos)
+- `max`: Tempo máximo (recomendado: 600s = 10 minutos)
+
+**atendimento_time_seconds**: Tempo de atendimento por classificação
+- VERMELHO: Casos mais complexos (20-60 minutos)
+- AMARELO: Casos urgentes (15-40 minutos)
+- VERDE: Casos moderados (10-30 minutos)
+- AZUL: Casos simples (5-20 minutos)
+
+#### Configuração de Logs
+
+**logging.level**: Nível de detalhamento
+- `DEBUG`: Máximo detalhamento (desenvolvimento)
+- `INFO`: Eventos normais (produção)
+- `WARNING`: Apenas alertas e erros
+- `ERROR`: Apenas erros críticos
+
+**logging.file**: Nome do arquivo de log
+- Padrão: `upa_simulator.log`
+
+**logging.max_bytes**: Tamanho máximo antes de rotacionar
+- Padrão: 10485760 (10 MB)
+
+**logging.backup_count**: Número de arquivos de backup
+- Padrão: 5 (mantém últimos 5 arquivos)
+
+### Exemplos de Configuração por Cenário
+
+#### Cenário 1: Fluxo Normal (Produção)
 
 ```json
 {
@@ -129,330 +410,789 @@ Edite o arquivo `config.json` para ajustar os parâmetros da simulação.
     "UPA Dinamérica": {
       "enabled": true,
       "patient_flow": {
-        "mode": "per_hour",  // "per_minute", "per_hour", "per_day"
-        "rate": 12           // 12 pacientes por hora
+        "mode": "per_hour",
+        "rate": 12
+      }
+    }
+  },
+  "simulation": {
+    "real_time_factor": 1.0
+  }
+}
+```
+
+**Resultado**: 12 pacientes/hora = 1 paciente a cada 5 minutos em tempo real
+
+#### Cenário 2: Fluxo Intenso (Horário de Pico)
+
+```json
+{
+  "upas": {
+    "UPA Dinamérica": {
+      "patient_flow": {
+        "mode": "per_hour",
+        "rate": 30
       }
     }
   }
 }
 ```
 
-**Modos de Fluxo**:
-- `per_minute`: Taxa de pacientes por minuto (ex: `"rate": 2` = 2 pacientes/min)
-- `per_hour`: Taxa de pacientes por hora (ex: `"rate": 12` = 12 pacientes/hora = 1 a cada 5 min)
-- `per_day`: Taxa de pacientes por dia (ex: `"rate": 288` = 288 pacientes/dia = 1 a cada 5 min)
+**Resultado**: 30 pacientes/hora = 1 paciente a cada 2 minutos
 
-#### 3. Distribuição de Classificações
+#### Cenário 3: Testes Rápidos
 
 ```json
 {
-  "classificacao_distribution": {
-    "VERMELHO": 0.05,  // 5% dos pacientes
-    "AMARELO": 0.25,   // 25% dos pacientes
-    "VERDE": 0.50,     // 50% dos pacientes
-    "AZUL": 0.20       // 20% dos pacientes
-  }
-}
-```
-
-**Importante**: A soma deve ser **1.0** (100%).
-
-#### 4. Fator de Velocidade
-
-```json
-{
+  "upas": {
+    "UPA Dinamérica": {
+      "patient_flow": {
+        "mode": "per_minute",
+        "rate": 1
+      }
+    }
+  },
   "simulation": {
-    "real_time_factor": 1.0  // 1.0 = tempo real, 2.0 = 2x mais rápido
+    "real_time_factor": 10.0
   }
 }
 ```
 
-- `1.0`: Tempo real
-- `2.0`: Simulação 2x mais rápida (útil para testes)
-- `0.5`: Simulação 2x mais lenta
+**Resultado**: 1 paciente/minuto acelerado 10x = 1 paciente a cada 6 segundos
 
 ---
 
-## 🚀 Execução
+## Execução
 
-### Execução Manual
+### Execução Básica
 
 ```bash
 # Ativar ambiente virtual
-source venv/bin/activate
+source venv/bin/activate  # Linux/macOS
+# ou
+venv\Scripts\activate  # Windows
 
 # Executar simulador
 python upa_simulator.py
 ```
 
-### Parar Simulação
+### Verificação Pré-Execução
 
-Pressione `Ctrl+C` para parar gracefully.
+Antes de executar, verifique a conectividade com os serviços:
+
+```bash
+# Testar Gateway Service
+curl http://localhost:8084/actuator/health
+
+# Testar Monitoring Service
+curl http://localhost:8086/actuator/health
+
+# Testar endpoint de UPAs
+curl http://localhost:8084/api/v1/upas
+```
+
+### Saída Esperada
+
+```
+2025-10-25 14:30:15 - root - INFO - ================================================================================
+2025-10-25 14:30:15 - root - INFO - Iniciando UPA Simulator - Protocolo de Manchester
+2025-10-25 14:30:15 - root - INFO - ================================================================================
+2025-10-25 14:30:15 - root - INFO - Buscando UPAs da API...
+2025-10-25 14:30:15 - root - INFO - Encontradas 2 UPA(s) na API
+2025-10-25 14:30:15 - root - INFO - UPA configurada: UPA Dinamérica (UUID: abc123...)
+2025-10-25 14:30:15 - root - INFO - UPA configurada: UPA Alto Branco (UUID: def456...)
+2025-10-25 14:30:15 - root - INFO - Simulador inicializado com 2 UPA(s)
+2025-10-25 14:30:15 - root - INFO - Protocolo de Manchester: Filas priorizadas por classificação de risco
+2025-10-25 14:30:15 - root - INFO -   - UPA Dinamérica: 12.0 pacientes/per_hour
+2025-10-25 14:30:15 - root - INFO -   - UPA Alto Branco: 15.0 pacientes/per_hour
+2025-10-25 14:30:15 - root - INFO - Simulação iniciada com 4 threads
+2025-10-25 14:30:15 - root - INFO - Pressione Ctrl+C para parar
+2025-10-25 14:30:15 - root - INFO - [UPA Dinamérica] Entrada de pacientes: 1 a cada 300.0s
+2025-10-25 14:30:15 - root - INFO - [UPA Alto Branco] Entrada de pacientes: 1 a cada 240.0s
+```
+
+### Parar a Simulação
+
+Para parar gracefully (permite finalização adequada):
+
+```bash
+# Pressione Ctrl+C
+```
+
+Saída esperada:
+```
+^C2025-10-25 14:35:22 - root - INFO - Parando simulação...
+2025-10-25 14:35:23 - root - INFO - Simulação finalizada
+```
 
 ---
 
-## 📊 Logs e Monitoramento
+## Monitoramento
 
-### Arquivo de Log
-
-O simulador gera logs em `upa_simulator.log` com rotação automática:
-
-- **Tamanho máximo**: 10 MB
-- **Backups**: 5 arquivos
-- **Formato**: `YYYY-MM-DD HH:MM:SS - LEVEL - MESSAGE`
-
-### Níveis de Log
-
-- `INFO`: Eventos normais (entrada, triagem, atendimento)
-- `WARNING`: Alertas (tempo de espera excedido)
-- `ERROR`: Erros de comunicação com API
-- `DEBUG`: Informações detalhadas (desabilitado por padrão)
-
-### Visualizar Logs em Tempo Real
+### Logs em Tempo Real
 
 ```bash
+# Visualizar logs enquanto simulador roda
 tail -f upa_simulator.log
+
+# Filtrar apenas entradas de pacientes
+tail -f upa_simulator.log | grep "entrou"
+
+# Filtrar apenas classificações VERMELHO
+tail -f upa_simulator.log | grep "VERMELHO"
+
+# Filtrar apenas alertas de tempo excedido
+tail -f upa_simulator.log | grep "ALERTA"
 ```
 
 ### Estatísticas Automáticas
 
-O simulador exibe estatísticas a cada 1 minuto:
+O simulador exibe estatísticas a cada 60 segundos:
 
 ```
 ================================================================================
 ESTATÍSTICAS - 14:35:22
 Total de pacientes ativos: 24
-  [UPA Dinamérica] Triagem: 3, Atendimento: 8, Total: 11
-  [UPA Alto Branco] Triagem: 5, Atendimento: 8, Total: 13
+  [UPA Dinamérica] Aguardando Triagem (PRIORIZADA): 3, Aguardando Atendimento (PRIORIZADA): 8, Total: 11
+  [UPA Alto Branco] Aguardando Triagem (PRIORIZADA): 5, Aguardando Atendimento (PRIORIZADA): 8, Total: 13
 ================================================================================
+```
+
+### Análise de Logs
+
+#### Contar pacientes por classificação
+
+```bash
+grep "triado:" upa_simulator.log | grep -o "VERMELHO\|AMARELO\|VERDE\|AZUL" | sort | uniq -c
+```
+
+Saída exemplo:
+```
+  45 AMARELO
+  12 AZUL
+  89 VERDE
+   8 VERMELHO
+```
+
+#### Contar alertas de tempo excedido
+
+```bash
+grep "ALERTA PROTOCOLO MANCHESTER" upa_simulator.log | wc -l
+```
+
+#### Tempo médio total por paciente
+
+```bash
+grep "finalizado" upa_simulator.log | grep -o "tempo total: [0-9.]*" | awk '{sum+=$3; count++} END {print "Média:", sum/count, "min"}'
+```
+
+### Rotação de Logs
+
+Configuração padrão:
+- Arquivo atual: `upa_simulator.log`
+- Backups: `upa_simulator.log.1`, `upa_simulator.log.2`, ..., `upa_simulator.log.5`
+- Rotação automática ao atingir 10 MB
+
+Para ajustar:
+```json
+"logging": {
+  "max_bytes": 20971520,  // 20 MB
+  "backup_count": 10      // 10 arquivos
+}
 ```
 
 ---
 
-## 🖥️ Execução em Servidor (24/7)
+## Implantação em Produção
 
-### Opção 1: Screen (mais simples)
+### Opção 1: Screen (Desenvolvimento/Testes)
+
+Ideal para testes temporários ou ambientes de desenvolvimento.
 
 ```bash
 # Instalar screen
 sudo apt-get install screen  # Ubuntu/Debian
+sudo yum install screen      # CentOS/RHEL
 
-# Criar sessão
+# Criar sessão nomeada
 screen -S upa-simulator
 
-# Ativar ambiente e executar
-cd /opt/upa-simulator
+# Dentro da sessão, executar
+cd /caminho/para/SCRIPT-UPA-SIMULATOR
 source venv/bin/activate
 python upa_simulator.py
 
-# Desanexar: Ctrl+A, depois D
+# Desanexar sessão: Ctrl+A, depois D
 # Reanexar: screen -r upa-simulator
+# Listar sessões: screen -ls
+# Matar sessão: screen -X -S upa-simulator quit
 ```
 
-### Opção 2: Systemd Service (recomendado para produção)
+### Opção 2: systemd Service (Produção Recomendado)
 
-1. Criar arquivo de serviço:
+Ideal para execução 24/7 com reinício automático.
+
+#### Passo 1: Criar arquivo de serviço
 
 ```bash
 sudo nano /etc/systemd/system/upa-simulator.service
 ```
 
-2. Adicionar conteúdo:
+#### Passo 2: Configurar serviço
 
 ```ini
 [Unit]
-Description=UPA Patient Flow Simulator
-After=network.target docker.service
+Description=UPA Patient Flow Simulator - Protocolo de Manchester
+Documentation=https://github.com/seu-usuario/SCRIPT-UPA-SIMULATOR
+After=network-online.target docker.service postgresql.service
+Wants=network-online.target
 Requires=docker.service
 
 [Service]
 Type=simple
-User=seu_usuario
+User=usuario_aplicacao
+Group=usuario_aplicacao
 WorkingDirectory=/opt/upa-simulator
+Environment="PATH=/opt/upa-simulator/venv/bin"
+ExecStartPre=/bin/sleep 10
 ExecStart=/opt/upa-simulator/venv/bin/python /opt/upa-simulator/upa_simulator.py
 Restart=always
 RestartSec=10
-StandardOutput=append:/var/log/upa-simulator.log
-StandardError=append:/var/log/upa-simulator-error.log
+StandardOutput=append:/var/log/upa-simulator/stdout.log
+StandardError=append:/var/log/upa-simulator/stderr.log
+
+# Limites de recursos
+LimitNOFILE=65536
+TimeoutStartSec=60
+TimeoutStopSec=30
 
 [Install]
 WantedBy=multi-user.target
 ```
 
-3. Habilitar e iniciar:
+**Ajustes necessários**:
+- `User` e `Group`: Usuário do sistema que executará o serviço
+- `WorkingDirectory`: Diretório onde está o projeto
+- `Environment`: PATH do ambiente virtual
+
+#### Passo 3: Criar diretório de logs
 
 ```bash
-sudo systemctl daemon-reload
-sudo systemctl enable upa-simulator
-sudo systemctl start upa-simulator
+sudo mkdir -p /var/log/upa-simulator
+sudo chown usuario_aplicacao:usuario_aplicacao /var/log/upa-simulator
 ```
 
-4. Comandos úteis:
+#### Passo 4: Habilitar e iniciar serviço
 
 ```bash
-# Status
+# Recarregar configuração do systemd
+sudo systemctl daemon-reload
+
+# Habilitar serviço (inicia automaticamente no boot)
+sudo systemctl enable upa-simulator
+
+# Iniciar serviço
+sudo systemctl start upa-simulator
+
+# Verificar status
+sudo systemctl status upa-simulator
+```
+
+#### Comandos úteis do systemd
+
+```bash
+# Ver status detalhado
 sudo systemctl status upa-simulator
 
-# Parar
+# Parar serviço
 sudo systemctl stop upa-simulator
 
-# Reiniciar
+# Reiniciar serviço
 sudo systemctl restart upa-simulator
 
-# Ver logs
+# Ver logs do serviço (últimas 100 linhas)
+sudo journalctl -u upa-simulator -n 100
+
+# Seguir logs em tempo real
 sudo journalctl -u upa-simulator -f
+
+# Ver logs desde data específica
+sudo journalctl -u upa-simulator --since "2025-10-25 14:00:00"
+
+# Ver logs entre datas
+sudo journalctl -u upa-simulator --since "2025-10-25 00:00:00" --until "2025-10-25 23:59:59"
+
+# Desabilitar auto-start no boot
+sudo systemctl disable upa-simulator
 ```
 
-### Opção 3: Docker (isolado)
+### Opção 3: Docker (Isolamento)
 
-1. Criar `Dockerfile`:
+Ideal para ambientes que requerem isolamento ou múltiplas instâncias.
+
+#### Passo 1: Criar Dockerfile
 
 ```dockerfile
 FROM python:3.11-slim
 
+LABEL maintainer="seu-email@example.com"
+LABEL description="UPA Patient Flow Simulator - Manchester Protocol"
+
 WORKDIR /app
 
+# Instalar dependências
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
 
-COPY upa_simulator.py config.json ./
+# Copiar código
+COPY upa_simulator.py .
+COPY config.json .
+
+# Criar usuário não-root
+RUN useradd -m -u 1000 simulator && \
+    chown -R simulator:simulator /app
+
+USER simulator
+
+# Health check
+HEALTHCHECK --interval=60s --timeout=5s --start-period=30s --retries=3 \
+  CMD python -c "import os; exit(0 if os.path.exists('upa_simulator.log') else 1)"
 
 CMD ["python", "upa_simulator.py"]
 ```
 
-2. Build e Run:
+#### Passo 2: Build da imagem
 
 ```bash
-docker build -t upa-simulator .
-docker run -d --name upa-simulator --restart unless-stopped upa-simulator
+docker build -t upa-simulator:latest .
+```
+
+#### Passo 3: Executar container
+
+```bash
+docker run -d \
+  --name upa-simulator \
+  --restart unless-stopped \
+  --network host \
+  -v $(pwd)/upa_simulator.log:/app/upa_simulator.log \
+  upa-simulator:latest
+```
+
+#### Comandos úteis Docker
+
+```bash
+# Ver logs do container
+docker logs -f upa-simulator
+
+# Ver status
+docker ps -a | grep upa-simulator
+
+# Parar container
+docker stop upa-simulator
+
+# Iniciar container
+docker start upa-simulator
+
+# Reiniciar container
+docker restart upa-simulator
+
+# Remover container
+docker rm -f upa-simulator
+
+# Acessar shell do container
+docker exec -it upa-simulator /bin/bash
+```
+
+#### Docker Compose (Recomendado)
+
+Criar `docker-compose.yml`:
+
+```yaml
+version: '3.8'
+
+services:
+  upa-simulator:
+    build: .
+    container_name: upa-simulator
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - ./upa_simulator.log:/app/upa_simulator.log
+      - ./config.json:/app/config.json:ro
+    environment:
+      - TZ=America/Sao_Paulo
+    healthcheck:
+      test: ["CMD", "python", "-c", "import os; exit(0 if os.path.exists('upa_simulator.log') else 1)"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+```
+
+Comandos:
+
+```bash
+# Iniciar
+docker-compose up -d
+
+# Ver logs
+docker-compose logs -f
+
+# Parar
+docker-compose down
+
+# Reiniciar
+docker-compose restart
 ```
 
 ---
 
-## 🔧 Troubleshooting
+## Validação e Testes
 
-### Problema: "Erro ao buscar UPAs da API"
+### Validação do Protocolo de Manchester
 
-**Solução**:
-- Verifique se o serviço Gateway está rodando (`curl http://localhost:8084/actuator/health`)
-- Confirme a URL no `config.json`
-- O simulador continuará usando UUIDs mockados se não conseguir conectar
+O simulador valida os seguintes aspectos:
 
-### Problema: "Falha ao registrar entrada/triagem/atendimento"
+#### 1. Pré-Classificação na Entrada
 
-**Solução**:
-- Verifique se o serviço Monitoring está rodando (`curl http://localhost:8086/actuator/health`)
-- Confirme a URL no `config.json`
-- Verifique logs do serviço Monitoring para erros
+Verificar que pacientes recebem classificação preliminar:
 
-### Problema: Muitos pacientes acumulados
-
-**Solução**:
-- Reduza a taxa de entrada (`patient_flow.rate`)
-- Aumente o `real_time_factor` para processar mais rápido
-- Reduza os tempos de triagem/atendimento no `config.json`
-
-### Problema: Poucos pacientes
-
-**Solução**:
-- Aumente a taxa de entrada
-- Verifique se as UPAs estão com `"enabled": true`
-
----
-
-## 📝 Exemplos de Configuração
-
-### Cenário 1: Fluxo Intenso (Pico)
-
-```json
-{
-  "UPA Dinamérica": {
-    "patient_flow": {
-      "mode": "per_hour",
-      "rate": 30  // 30 pacientes/hora = 1 a cada 2 min
-    }
-  }
-}
+```bash
+grep "entrou" upa_simulator.log | head -5
 ```
 
-### Cenário 2: Fluxo Normal
-
-```json
-{
-  "UPA Dinamérica": {
-    "patient_flow": {
-      "mode": "per_hour",
-      "rate": 12  // 12 pacientes/hora = 1 a cada 5 min
-    }
-  }
-}
+Saída esperada:
+```
+[UPA Dinamérica] Paciente 3f2a8b9c entrou [Pré-classificação: VERMELHO] (Bairro: Malvinas)
+[UPA Dinamérica] Paciente 7e5d4c1b entrou [Pré-classificação: VERDE] (Bairro: Dinamérica)
 ```
 
-### Cenário 3: Fluxo Baixo (Madrugada)
+#### 2. Priorização na Triagem
 
-```json
-{
-  "UPA Dinamérica": {
-    "patient_flow": {
-      "mode": "per_hour",
-      "rate": 4  // 4 pacientes/hora = 1 a cada 15 min
-    }
-  }
-}
+Verificar que pacientes mais graves são triados primeiro:
+
+```bash
+# Extrair sequência de triagens
+grep "Iniciando triagem detalhada" upa_simulator.log | grep -o "Pré-classificação: [A-Z]*" | head -10
 ```
 
-### Cenário 4: Testes Rápidos
+Deve mostrar pacientes VERMELHO/AMARELO sendo priorizados.
+
+#### 3. Reclassificação (15% dos casos)
+
+```bash
+grep "RECLASSIFICADA" upa_simulator.log | wc -l
+total=$(grep "triado:" upa_simulator.log | wc -l)
+echo "Taxa de reclassificação: $(echo "scale=2; $(grep "RECLASSIFICADA" upa_simulator.log | wc -l) * 100 / $total" | bc)%"
+```
+
+Deve estar próximo de 15%.
+
+#### 4. Alertas de Tempo Excedido
+
+```bash
+grep "ALERTA PROTOCOLO MANCHESTER" upa_simulator.log
+```
+
+Exemplo:
+```
+[UPA Dinamérica] ALERTA PROTOCOLO MANCHESTER: Paciente 5b3c2a1d (AMARELO) aguardou 65.3 min (máximo permitido: 60 min) - TEMPO EXCEDIDO!
+```
+
+#### 5. Distribuição de Classificações
+
+```bash
+# Contar por classificação
+for cor in VERMELHO AMARELO VERDE AZUL; do
+  count=$(grep "triado:" upa_simulator.log | grep -c "$cor")
+  echo "$cor: $count"
+done
+```
+
+Comparar com distribuição configurada.
+
+### Teste de Carga
+
+Simular alta demanda:
 
 ```json
 {
   "simulation": {
-    "real_time_factor": 10.0  // 10x mais rápido
+    "real_time_factor": 10.0
   },
-  "UPA Dinamérica": {
-    "patient_flow": {
-      "mode": "per_minute",
-      "rate": 1  // 1 paciente/minuto → processado em 6s
+  "upas": {
+    "UPA Dinamérica": {
+      "patient_flow": {
+        "mode": "per_minute",
+        "rate": 2
+      }
     }
   }
 }
 ```
 
----
+Executar por 10 minutos e validar:
+- Não há erros de sincronização (race conditions)
+- Filas crescem/diminuem conforme esperado
+- APIs respondem adequadamente
 
-## 📈 Validação do Protocolo de Manchester
+### Teste de Integração
 
-### O que o simulador valida:
+Validar comunicação com serviços:
 
-1. ✅ **Priorização**: Pacientes VERMELHO são atendidos antes de AMARELO, VERDE e AZUL
-2. ✅ **Tempo de Espera**: Alertas quando pacientes excedem o tempo máximo
-3. ✅ **Distribuição**: Classificações seguem a distribuição configurada
-4. ✅ **Fluxo Contínuo**: Sistema processa pacientes 24/7 sem interrupção
+```bash
+# Deve mostrar chamadas bem-sucedidas
+grep "Entrada registrada" upa_simulator.log | wc -l
+grep "Triagem registrada" upa_simulator.log | wc -l
+grep "Atendimento registrado" upa_simulator.log | wc -l
 
-### Métricas no Dashboard
-
-Após rodar o simulador, você pode validar no dashboard web:
-
-- **Fila por Classificação**: Verificar se prioridades estão corretas
-- **Tempo Médio de Espera**: Por classificação de Manchester
-- **Ocupação**: Taxa de ocupação da UPA ao longo do tempo
-- **Distribuição por Bairro**: Verificar origem dos pacientes
+# Deve ser igual ao número de pacientes gerados
+```
 
 ---
 
-## 🆘 Suporte
+## Troubleshooting
 
-Para problemas ou dúvidas:
+### Problema: Erro ao buscar UPAs da API
 
-1. Verifique os logs: `tail -f upa_simulator.log`
-2. Verifique status dos serviços: `docker ps` ou `systemctl status`
-3. Teste conectividade: `curl http://localhost:8086/actuator/health`
+**Sintoma**:
+```
+ERROR - Erro ao fazer GET de /api/v1/upas: Connection refused
+WARNING - Falha ao buscar UPAs da API. Usando configuração local.
+```
+
+**Causas possíveis**:
+1. Gateway Service não está rodando
+2. URL incorreta no `config.json`
+3. Firewall bloqueando conexão
+
+**Soluções**:
+
+```bash
+# 1. Verificar se serviço está rodando
+curl http://localhost:8084/actuator/health
+
+# 2. Verificar porta correta
+sudo netstat -tulpn | grep 8084
+
+# 3. Testar endpoint de UPAs
+curl -v http://localhost:8084/api/v1/upas
+
+# 4. Verificar logs do Gateway Service
+docker logs gateway-service  # se Docker
+journalctl -u gateway-service -n 50  # se systemd
+```
+
+**Workaround**: O simulador continuará usando UUIDs mockados.
+
+### Problema: Falha ao registrar eventos
+
+**Sintoma**:
+```
+WARNING - Falha ao registrar entrada: paciente 3f2a8b9c
+```
+
+**Causas possíveis**:
+1. Monitoring Service não está rodando
+2. URL incorreta no `config.json`
+3. Timeout de rede
+4. Serviço rejeitando requisições (ex: validação falhou)
+
+**Soluções**:
+
+```bash
+# 1. Verificar serviço
+curl http://localhost:8086/actuator/health
+
+# 2. Testar endpoint manualmente
+curl -X POST http://localhost:8086/api/v1/events/entrada \
+  -H "Content-Type: application/json" \
+  -d '{
+    "patientId": "test-123",
+    "upaId": "upa-uuid",
+    "bairro": "Centro",
+    "timestamp": "2025-10-25T14:30:00"
+  }'
+
+# 3. Ver logs do Monitoring Service
+docker logs monitoring-service
+```
+
+**Ajuste de timeout**:
+
+Edite `upa_simulator.py`:
+```python
+self.monitoring_client = APIClient(
+    self.config["monitoring_service"]["base_url"],
+    timeout=30  # Aumentar de 10 para 30 segundos
+)
+```
+
+### Problema: Muitos pacientes acumulados nas filas
+
+**Sintoma**:
+```
+ESTATÍSTICAS - 14:35:22
+Total de pacientes ativos: 150
+```
+
+**Causas**:
+1. Taxa de entrada muito alta
+2. Tempo de triagem/atendimento muito longo
+3. `real_time_factor` muito baixo
+
+**Soluções**:
+
+```json
+// Opção 1: Reduzir taxa de entrada
+"patient_flow": {
+  "mode": "per_hour",
+  "rate": 8  // Reduzir de 12 para 8
+}
+
+// Opção 2: Acelerar simulação
+"simulation": {
+  "real_time_factor": 5.0  // Processar 5x mais rápido
+}
+
+// Opção 3: Reduzir tempos de processamento
+"triagem_time_seconds": {
+  "min": 60,  // Reduzir de 180
+  "max": 300  // Reduzir de 600
+}
+```
+
+### Problema: Poucos pacientes sendo gerados
+
+**Sintoma**:
+```
+ESTATÍSTICAS - 14:35:22
+Total de pacientes ativos: 2
+```
+
+**Verificações**:
+
+```bash
+# 1. Confirmar UPAs habilitadas
+grep "enabled.*true" config.json
+
+# 2. Ver intervalo calculado
+grep "Entrada de pacientes" upa_simulator.log
+```
+
+**Soluções**:
+
+```json
+// Aumentar taxa de entrada
+"patient_flow": {
+  "mode": "per_hour",
+  "rate": 30  // Aumentar de 12 para 30
+}
+```
+
+### Problema: Race conditions / Erros de thread
+
+**Sintoma**:
+```
+Exception in thread Thread-3:
+  File "queue.py", line 171, in get
+    Empty
+```
+
+**Causa**: Problema de sincronização (já corrigido no código atual)
+
+**Solução**: Atualizar para versão mais recente do código que usa locks.
+
+### Problema: Logs não estão sendo gerados
+
+**Verificações**:
+
+```bash
+# 1. Verificar permissões do diretório
+ls -la upa_simulator.log
+
+# 2. Verificar configuração de logging
+grep -A5 "logging" config.json
+
+# 3. Verificar se diretório é gravável
+touch test.log && rm test.log
+```
+
+**Soluções**:
+
+```bash
+# Dar permissões
+chmod 664 upa_simulator.log
+chown usuario:usuario upa_simulator.log
+
+# Criar diretório se necessário
+mkdir -p /var/log/upa-simulator
+```
+
+### Problema: Distribuição de classificações incorreta
+
+**Verificação**:
+
+```bash
+# Contar triagens por classificação
+for cor in VERMELHO AMARELO VERDE AZUL; do
+  count=$(grep "triado:" upa_simulator.log | grep -c "$cor")
+  total=$(grep "triado:" upa_simulator.log | wc -l)
+  pct=$(echo "scale=2; $count * 100 / $total" | bc)
+  echo "$cor: $count ($pct%)"
+done
+```
+
+**Causa**: Configuração incorreta em `config.json`
+
+**Solução**:
+
+```json
+// Verificar que soma = 1.0
+"classificacao_distribution": {
+  "VERMELHO": 0.05,
+  "AMARELO": 0.25,
+  "VERDE": 0.50,
+  "AZUL": 0.20
+}
+// 0.05 + 0.25 + 0.50 + 0.20 = 1.00 ✓
+```
 
 ---
 
-## 📄 Licença
+## Referências
 
-Este simulador faz parte do projeto de TCC - UPA Campina Grande - PB.
+### Protocolo de Manchester
+
+1. **Manchester Triage Group**. Emergency Triage. 3rd ed. Wiley-Blackwell, 2014.
+
+2. **Mackway-Jones, K., Marsden, J., Windle, J.** (2014). Sistema Manchester de Classificação de Risco. Grupo Brasileiro de Classificação de Risco.
+
+3. **Brasil. Ministério da Saúde**. HumanizaSUS: Acolhimento com avaliação e classificação de risco. Brasília: Ministério da Saúde, 2004.
+
+### Implementações em UPAs Brasileiras
+
+4. **Souza, C.C., et al.** (2011). Classificação de risco em pronto-socorro: concordância entre um protocolo institucional brasileiro e Manchester. Revista Latino-Americana de Enfermagem, 19(1).
+
+5. **Acosta, A.M., et al.** (2012). Acolhimento com classificação de risco em Unidades de Pronto Atendimento. Revista Gaúcha de Enfermagem, 33(4).
+
+### Documentação Técnica
+
+6. **Python Software Foundation**. Python Documentation - Threading. https://docs.python.org/3/library/threading.html
+
+7. **Python Software Foundation**. Python Documentation - Queue. https://docs.python.org/3/library/queue.html
+
+8. **Requests Documentation**. HTTP for Humans. https://requests.readthedocs.io/
+
+### Contato e Suporte
+
+Para dúvidas técnicas ou sugestões de melhoria:
+- Abrir issue no repositório GitHub
+- Consultar documentação adicional em `/docs` (se disponível)
 
 ---
 
-**Desenvolvido para validação do Protocolo de Manchester no sistema UPA-TCC**
+**Desenvolvido como parte do Trabalho de Conclusão de Curso**
+**Validação do Protocolo de Manchester em Sistemas de Gestão de UPAs**
+**Campina Grande - PB**
