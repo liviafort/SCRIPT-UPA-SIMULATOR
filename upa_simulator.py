@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import Enum
 from logging.handlers import RotatingFileHandler
-from queue import PriorityQueue
+from queue import PriorityQueue, Queue
 from typing import Dict, List, Optional
 import requests
 from requests.adapters import HTTPAdapter
@@ -116,8 +116,8 @@ class UPASimulator:
         self.gateway_client = APIClient(self.config["gateway_service"]["base_url"])
 
         self.upas: Dict[str, UPAConfig] = {}
-        self.fila_triagem: Dict[str, PriorityQueue] = {}  # PRIORIZADA - Protocolo de Manchester desde entrada
-        self.fila_atendimento: Dict[str, PriorityQueue] = {}  # PRIORIZADA - Atendimento médico
+        self.fila_triagem: Dict[str, Queue] = {}  # FIFO - Ordem de chegada (sem classificação ainda)
+        self.fila_atendimento: Dict[str, PriorityQueue] = {}  # PRIORIZADA - Após classificação na triagem
         self.active_patients: Dict[str, Patient] = {}
 
         # Locks para thread safety
@@ -169,13 +169,13 @@ class UPASimulator:
         self._fetch_upas()
 
         for upa_name in self.upas.keys():
-            self.fila_triagem[upa_name] = PriorityQueue()  # Priorizada desde a entrada
-            self.fila_atendimento[upa_name] = PriorityQueue()  # Priorizada para atendimento
+            self.fila_triagem[upa_name] = Queue()  # FIFO - ordem de chegada (sem classificação)
+            self.fila_atendimento[upa_name] = PriorityQueue()  # Priorizada após triagem
             self.fila_triagem_locks[upa_name] = threading.Lock()
             self.fila_atendimento_locks[upa_name] = threading.Lock()
 
         logging.info(f"Simulador inicializado com {len(self.upas)} UPA(s)")
-        logging.info("Protocolo de Manchester: Filas priorizadas por classificação de risco")
+        logging.info("Protocolo de Manchester: Classificação na triagem, atendimento priorizado")
         for upa_name, upa_config in self.upas.items():
             logging.info(f"  - {upa_name}: {upa_config.flow_rate} pacientes/{upa_config.flow_mode}")
 
@@ -306,7 +306,7 @@ class UPASimulator:
 
                 self._register_entrada(patient)
 
-                # Adiciona à fila de triagem PRIORIZADA (Protocolo de Manchester desde entrada)
+                # Adiciona à fila de triagem FIFO (ordem de chegada, sem classificação)
                 with self.fila_triagem_locks[upa_name]:
                     self.fila_triagem[upa_name].put(patient)
                     fila_size = self.fila_triagem[upa_name].qsize()
@@ -315,9 +315,8 @@ class UPASimulator:
                     self.active_patients[patient.patient_id] = patient
 
                 logging.info(
-                    f"[{upa_name}] 🚪 Paciente {patient.patient_id[:8]} entrou "
-                    f"[Pré-classificação: {patient.classificacao.name}] "
-                    f"(Bairro: {patient.bairro}, Fila triagem priorizada: {fila_size})"
+                    f"[{upa_name}] Paciente {patient.patient_id[:8]} entrou na recepção "
+                    f"(Bairro: {patient.bairro}, Aguardando triagem: {fila_size})"
                 )
 
                 time.sleep(interval)
@@ -328,19 +327,16 @@ class UPASimulator:
 
     def _create_patient(self, upa_config: UPAConfig) -> Patient:
         """
-        Cria paciente com pré-classificação visual/sintomas relatados
-        (como ocorre na recepção das UPAs reais)
+        Cria paciente na entrada (recepção)
+        Paciente fornece apenas dados pessoais, SEM classificação
         """
-        # Pré-classificação baseada em sintomas relatados na entrada
-        pre_classificacao = self._assign_classificacao(upa_config.classificacao_distribution)
-
         return Patient(
             patient_id=str(uuid.uuid4()),
             upa_id=upa_config.uuid,
             upa_name=upa_config.name,
             bairro=random.choice(upa_config.bairros),
             status=PatientStatus.AGUARDANDO_TRIAGEM,
-            classificacao=pre_classificacao,  # Já entra com classificação preliminar
+            classificacao=None,  # Não tem classificação na entrada
             entrada_timestamp=datetime.now()
         )
 
@@ -363,8 +359,8 @@ class UPASimulator:
 
     def _triagem_processing_loop(self):
         """
-        Loop de processamento de triagem - PRIORIZADO por classificação
-        Pacientes mais graves (pré-classificados na entrada) são triados primeiro
+        Loop de processamento de triagem - FIFO (ordem de chegada)
+        AQUI é feita a classificação de Manchester (não antes)
         """
         triagem_config = self.config["simulation"]["triagem_time_seconds"]
         real_time_factor = self.config["simulation"]["real_time_factor"]
@@ -378,52 +374,41 @@ class UPASimulator:
                     if fila.empty():
                         continue
 
-                    # Remove paciente da fila PRIORIZADA (maior prioridade primeiro)
+                    # Remove paciente da fila FIFO (primeiro que chegou)
                     with self.fila_triagem_locks[upa_name]:
                         if fila.empty():  # Double-check após lock
                             continue
                         patient = fila.get()
 
-                    # Tempo de triagem pode ser menor para casos críticos
-                    classificacao_inicial = patient.classificacao.name
                     triagem_time = random.randint(
                         triagem_config["min"],
                         triagem_config["max"]
                     ) / real_time_factor
 
                     logging.info(
-                        f"[{upa_name}] 🩺 Iniciando triagem detalhada do paciente {patient.patient_id[:8]} "
-                        f"[Pré-classificação: {classificacao_inicial}] "
+                        f"[{upa_name}] Iniciando triagem do paciente {patient.patient_id[:8]} "
                         f"(tempo estimado: {triagem_time:.0f}s)"
                     )
 
                     time.sleep(triagem_time)
 
-                    # Confirma ou ajusta classificação de Manchester após avaliação detalhada
-                    # (85% mantém, 15% pode mudar após exame mais detalhado)
-                    if random.random() > 0.15:
-                        # Mantém classificação inicial
-                        pass
-                    else:
-                        # Reclassifica após avaliação detalhada
-                        patient.classificacao = self._assign_classificacao(
-                            self.upas[upa_name].classificacao_distribution
-                        )
-
+                    # AQUI é feita a classificação de Manchester
+                    patient.classificacao = self._assign_classificacao(
+                        self.upas[upa_name].classificacao_distribution
+                    )
                     patient.triagem_timestamp = datetime.now()
                     patient.status = PatientStatus.AGUARDANDO_ATENDIMENTO
 
                     self._register_triagem(patient)
 
-                    # Adiciona à fila de atendimento (PRIORIZADA por classificação final)
+                    # Adiciona à fila de atendimento PRIORIZADA por classificação
                     with self.fila_atendimento_locks[upa_name]:
                         self.fila_atendimento[upa_name].put(patient)
 
-                    status_msg = "confirmada" if classificacao_inicial == patient.classificacao.name else f"RECLASSIFICADA: {classificacao_inicial} → {patient.classificacao.name}"
-
                     logging.info(
-                        f"[{upa_name}] ✓ Paciente {patient.patient_id[:8]} triado: "
-                        f"{patient.classificacao.name} (prioridade {patient.classificacao.prioridade}) - {status_msg}"
+                        f"[{upa_name}] Paciente {patient.patient_id[:8]} classificado como "
+                        f"{patient.classificacao.name} (prioridade {patient.classificacao.prioridade}) - "
+                        f"Movido para fila de atendimento priorizada"
                     )
 
                 time.sleep(1)
@@ -487,7 +472,7 @@ class UPASimulator:
                     # Alerta se excedeu tempo máximo de espera
                     if wait_time > max_wait and max_wait > 0:
                         logging.warning(
-                            f"[{upa_name}] ⚠️  ALERTA PROTOCOLO MANCHESTER: Paciente {patient.patient_id[:8]} "
+                            f"[{upa_name}] ALERTA PROTOCOLO MANCHESTER: Paciente {patient.patient_id[:8]} "
                             f"({patient.classificacao.name}) aguardou {wait_time:.1f} min "
                             f"(máximo permitido: {max_wait} min) - TEMPO EXCEDIDO!"
                         )
@@ -499,7 +484,7 @@ class UPASimulator:
                     ) / real_time_factor
 
                     logging.info(
-                        f"[{upa_name}] 🏥 Iniciando atendimento do paciente {patient.patient_id[:8]} "
+                        f"[{upa_name}] Iniciando atendimento do paciente {patient.patient_id[:8]} "
                         f"[{patient.classificacao.name} - Prioridade {patient.classificacao.prioridade}] "
                         f"(tempo estimado: {atendimento_time:.0f}s, aguardou: {wait_time:.1f}min)"
                     )
@@ -521,7 +506,7 @@ class UPASimulator:
                     total_time = (patient.finalizacao_timestamp - patient.entrada_timestamp).total_seconds() / 60
 
                     logging.info(
-                        f"[{upa_name}] ✅ Paciente {patient.patient_id[:8]} finalizado "
+                        f"[{upa_name}] Paciente {patient.patient_id[:8]} finalizado "
                         f"[{patient.classificacao.name}] (tempo total: {total_time:.1f} min)"
                     )
 
@@ -574,13 +559,13 @@ class UPASimulator:
                 total_active = sum(s["total"] for s in stats["upas"].values())
 
                 logging.info("=" * 80)
-                logging.info(f"📊 ESTATÍSTICAS - {datetime.now().strftime('%H:%M:%S')}")
+                logging.info(f"ESTATÍSTICAS - {datetime.now().strftime('%H:%M:%S')}")
                 logging.info(f"Total de pacientes ativos: {total_active}")
 
                 for upa_name, upa_stats in stats["upas"].items():
                     logging.info(
                         f"  [{upa_name}] "
-                        f"Aguardando Triagem (PRIORIZADA): {upa_stats['fila_triagem']}, "
+                        f"Aguardando Triagem (FIFO): {upa_stats['fila_triagem']}, "
                         f"Aguardando Atendimento (PRIORIZADA): {upa_stats['fila_atendimento']}, "
                         f"Total: {upa_stats['total']}"
                     )

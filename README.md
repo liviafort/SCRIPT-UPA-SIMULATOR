@@ -67,7 +67,9 @@ O Protocolo de Manchester é um sistema de triagem e classificação de risco am
 
 **Protocolo de Manchester**: Sistema que prioriza pacientes por gravidade clínica. Um paciente classificado como VERMELHO que chega às 10:30 será atendido antes de um paciente AZUL que chegou às 10:00.
 
-**Importante**: As UPAs que implementam o Protocolo de Manchester **não utilizam FIFO em nenhuma etapa do fluxo**. A priorização por gravidade ocorre desde a recepção até o atendimento médico final.
+**Importante**: O Protocolo de Manchester altera o FIFO tradicional da seguinte forma:
+- **Até a triagem**: FIFO (ordem de chegada) - pacientes aguardam triagem sem classificação
+- **Após a triagem**: PRIORIZAÇÃO por gravidade - pacientes são atendidos por classificação de risco
 
 ---
 
@@ -150,20 +152,20 @@ O Protocolo de Manchester é um sistema de triagem e classificação de risco am
 ### Fluxo de Dados
 
 ```
-1. Entrada
-   └─> Paciente criado com pré-classificação (baseada em sintomas relatados)
+1. Entrada (Recepção)
+   └─> Paciente fornece dados pessoais (SEM classificação)
    └─> Registrado via API (POST /api/v1/events/entrada)
-   └─> Adicionado à PriorityQueue de triagem
+   └─> Adicionado à Queue de triagem (FIFO)
 
-2. Triagem
-   └─> Paciente removido da fila por prioridade (VERMELHO primeiro)
-   └─> Triagem detalhada (180-600 segundos simulados)
-   └─> 85% mantém classificação, 15% são reclassificados
+2. Triagem (Enfermeiro)
+   └─> Paciente removido da fila FIFO (ordem de chegada)
+   └─> Avaliação de sinais e sintomas (180-600 segundos simulados)
+   └─> CLASSIFICAÇÃO DE MANCHESTER é atribuída (VERMELHO/AMARELO/VERDE/AZUL)
    └─> Registrado via API (POST /api/v1/events/triagem)
-   └─> Adicionado à PriorityQueue de atendimento
+   └─> Adicionado à PriorityQueue de atendimento (priorizada)
 
-3. Atendimento
-   └─> Paciente removido da fila por prioridade
+3. Atendimento (Médico)
+   └─> Paciente removido da fila por PRIORIDADE (VERMELHO primeiro)
    └─> Verificação de tempo de espera vs. limite do protocolo
    └─> Atendimento médico (tempo varia por classificação)
    └─> Registrado via API (POST /api/v1/events/atendimento)
@@ -745,40 +747,42 @@ sudo systemctl disable upa-simulator
 
 O simulador valida os seguintes aspectos:
 
-#### 1. Pré-Classificação na Entrada
+#### 1. Entrada Sem Classificação
 
-Verificar que pacientes recebem classificação preliminar:
+Verificar que pacientes entram sem classificação:
 
 ```bash
-grep "entrou" upa_simulator.log | head -5
+grep "entrou na recepção" upa_simulator.log | head -5
 ```
 
 Saída esperada:
 ```
-[UPA Dinamérica] Paciente 3f2a8b9c entrou [Pré-classificação: VERMELHO] (Bairro: Malvinas)
-[UPA Dinamérica] Paciente 7e5d4c1b entrou [Pré-classificação: VERDE] (Bairro: Dinamérica)
+[UPA Dinamérica] Paciente 3f2a8b9c entrou na recepção (Bairro: Malvinas, Aguardando triagem: 1)
+[UPA Alto Branco] Paciente 7e5d4c1b entrou na recepção (Bairro: Alto Branco, Aguardando triagem: 2)
 ```
 
-#### 2. Priorização na Triagem
+#### 2. Triagem FIFO
 
-Verificar que pacientes mais graves são triados primeiro:
+Verificar que pacientes são triados na ordem de chegada:
 
 ```bash
-# Extrair sequência de triagens
-grep "Iniciando triagem detalhada" upa_simulator.log | grep -o "Pré-classificação: [A-Z]*" | head -10
+# Ver ordem de triagens
+grep "Iniciando triagem do paciente" upa_simulator.log | head -10
 ```
 
-Deve mostrar pacientes VERMELHO/AMARELO sendo priorizados.
+#### 3. Classificação na Triagem
 
-#### 3. Reclassificação (15% dos casos)
+Verificar que classificação é atribuída na triagem:
 
 ```bash
-grep "RECLASSIFICADA" upa_simulator.log | wc -l
-total=$(grep "triado:" upa_simulator.log | wc -l)
-echo "Taxa de reclassificação: $(echo "scale=2; $(grep "RECLASSIFICADA" upa_simulator.log | wc -l) * 100 / $total" | bc)%"
+grep "classificado como" upa_simulator.log | head -5
 ```
 
-Deve estar próximo de 15%.
+Saída esperada:
+```
+[UPA Dinamérica] Paciente 3f2a8b9c classificado como VERMELHO (prioridade 1)
+[UPA Alto Branco] Paciente 7e5d4c1b classificado como VERDE (prioridade 3)
+```
 
 #### 4. Alertas de Tempo Excedido
 
