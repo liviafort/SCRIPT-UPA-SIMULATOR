@@ -184,6 +184,10 @@ O Protocolo de Manchester é um sistema de triagem e classificação de risco am
 
 ### Requisitos de Infraestrutura
 
+**Importante**: O simulador é um **cliente** que se conecta aos serviços já existentes. Você **NÃO** precisa instalar ou configurar esses serviços para rodar o simulador.
+
+Os serviços devem estar rodando (geralmente em Docker) e acessíveis:
+
 - **Gateway Service**: Servidor rodando na porta 8084
   - Endpoint: `GET /api/v1/upas` (lista de UPAs)
 
@@ -192,7 +196,7 @@ O Protocolo de Manchester é um sistema de triagem e classificação de risco am
   - Endpoint: `POST /api/v1/events/triagem`
   - Endpoint: `POST /api/v1/events/atendimento`
 
-- **Banco de Dados**: PostgreSQL com dados das UPAs
+**O simulador apenas envia dados HTTP para esses serviços.**
 
 ### Requisitos de Sistema
 
@@ -605,9 +609,22 @@ Para ajustar:
 
 ## Implantação em Produção
 
-### Opção 1: Screen (Desenvolvimento/Testes)
+### Opção 1: Execução Direta (Simples)
 
-Ideal para testes temporários ou ambientes de desenvolvimento.
+Ideal para testes e validações rápidas.
+
+```bash
+# Executar em primeiro plano
+cd /caminho/para/SCRIPT-UPA-SIMULATOR
+source venv/bin/activate
+python upa_simulator.py
+
+# Para parar: Ctrl+C
+```
+
+### Opção 2: Screen (Testes Prolongados)
+
+Ideal para manter o simulador rodando enquanto você trabalha em outras tarefas.
 
 ```bash
 # Instalar screen
@@ -628,9 +645,11 @@ python upa_simulator.py
 # Matar sessão: screen -X -S upa-simulator quit
 ```
 
-### Opção 2: systemd Service (Produção Recomendado)
+### Opção 3: systemd Service (Produção - Opcional)
 
-Ideal para execução 24/7 com reinício automático.
+Ideal apenas se você precisar que o simulador rode 24/7 automaticamente.
+
+**Nota**: Esta opção é mais complexa e só é necessária se você realmente precisar de execução automática contínua.
 
 #### Passo 1: Criar arquivo de serviço
 
@@ -643,46 +662,28 @@ sudo nano /etc/systemd/system/upa-simulator.service
 ```ini
 [Unit]
 Description=UPA Patient Flow Simulator - Protocolo de Manchester
-Documentation=https://github.com/seu-usuario/SCRIPT-UPA-SIMULATOR
-After=network-online.target docker.service postgresql.service
+After=network-online.target
 Wants=network-online.target
-Requires=docker.service
 
 [Service]
 Type=simple
-User=usuario_aplicacao
-Group=usuario_aplicacao
-WorkingDirectory=/opt/upa-simulator
-Environment="PATH=/opt/upa-simulator/venv/bin"
-ExecStartPre=/bin/sleep 10
-ExecStart=/opt/upa-simulator/venv/bin/python /opt/upa-simulator/upa_simulator.py
-Restart=always
+User=seu_usuario
+Group=seu_usuario
+WorkingDirectory=/home/seu_usuario/SCRIPT-UPA-SIMULATOR
+Environment="PATH=/home/seu_usuario/SCRIPT-UPA-SIMULATOR/venv/bin"
+ExecStart=/home/seu_usuario/SCRIPT-UPA-SIMULATOR/venv/bin/python upa_simulator.py
+Restart=on-failure
 RestartSec=10
-StandardOutput=append:/var/log/upa-simulator/stdout.log
-StandardError=append:/var/log/upa-simulator/stderr.log
-
-# Limites de recursos
-LimitNOFILE=65536
-TimeoutStartSec=60
-TimeoutStopSec=30
 
 [Install]
 WantedBy=multi-user.target
 ```
 
 **Ajustes necessários**:
-- `User` e `Group`: Usuário do sistema que executará o serviço
-- `WorkingDirectory`: Diretório onde está o projeto
-- `Environment`: PATH do ambiente virtual
+- Substituir `seu_usuario` pelo seu usuário do sistema
+- Ajustar `WorkingDirectory` para o caminho real do projeto
 
-#### Passo 3: Criar diretório de logs
-
-```bash
-sudo mkdir -p /var/log/upa-simulator
-sudo chown usuario_aplicacao:usuario_aplicacao /var/log/upa-simulator
-```
-
-#### Passo 4: Habilitar e iniciar serviço
+#### Passo 3: Habilitar e iniciar serviço
 
 ```bash
 # Recarregar configuração do systemd
@@ -726,125 +727,15 @@ sudo journalctl -u upa-simulator --since "2025-10-25 00:00:00" --until "2025-10-
 sudo systemctl disable upa-simulator
 ```
 
-### Opção 3: Docker (Isolamento)
+### Resumo: Qual Opção Escolher?
 
-Ideal para ambientes que requerem isolamento ou múltiplas instâncias.
+| Cenário | Opção Recomendada |
+|---------|-------------------|
+| Demonstração para banca | **Opção 1** (Execução Direta) |
+| Testes de 1-2 horas | **Opção 2** (Screen) |
+| Validação 24/7 | **Opção 3** (systemd) |
 
-#### Passo 1: Criar Dockerfile
-
-```dockerfile
-FROM python:3.11-slim
-
-LABEL maintainer="seu-email@example.com"
-LABEL description="UPA Patient Flow Simulator - Manchester Protocol"
-
-WORKDIR /app
-
-# Instalar dependências
-COPY requirements.txt .
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt
-
-# Copiar código
-COPY upa_simulator.py .
-COPY config.json .
-
-# Criar usuário não-root
-RUN useradd -m -u 1000 simulator && \
-    chown -R simulator:simulator /app
-
-USER simulator
-
-# Health check
-HEALTHCHECK --interval=60s --timeout=5s --start-period=30s --retries=3 \
-  CMD python -c "import os; exit(0 if os.path.exists('upa_simulator.log') else 1)"
-
-CMD ["python", "upa_simulator.py"]
-```
-
-#### Passo 2: Build da imagem
-
-```bash
-docker build -t upa-simulator:latest .
-```
-
-#### Passo 3: Executar container
-
-```bash
-docker run -d \
-  --name upa-simulator \
-  --restart unless-stopped \
-  --network host \
-  -v $(pwd)/upa_simulator.log:/app/upa_simulator.log \
-  upa-simulator:latest
-```
-
-#### Comandos úteis Docker
-
-```bash
-# Ver logs do container
-docker logs -f upa-simulator
-
-# Ver status
-docker ps -a | grep upa-simulator
-
-# Parar container
-docker stop upa-simulator
-
-# Iniciar container
-docker start upa-simulator
-
-# Reiniciar container
-docker restart upa-simulator
-
-# Remover container
-docker rm -f upa-simulator
-
-# Acessar shell do container
-docker exec -it upa-simulator /bin/bash
-```
-
-#### Docker Compose (Recomendado)
-
-Criar `docker-compose.yml`:
-
-```yaml
-version: '3.8'
-
-services:
-  upa-simulator:
-    build: .
-    container_name: upa-simulator
-    restart: unless-stopped
-    network_mode: host
-    volumes:
-      - ./upa_simulator.log:/app/upa_simulator.log
-      - ./config.json:/app/config.json:ro
-    environment:
-      - TZ=America/Sao_Paulo
-    healthcheck:
-      test: ["CMD", "python", "-c", "import os; exit(0 if os.path.exists('upa_simulator.log') else 1)"]
-      interval: 60s
-      timeout: 5s
-      retries: 3
-      start_period: 30s
-```
-
-Comandos:
-
-```bash
-# Iniciar
-docker-compose up -d
-
-# Ver logs
-docker-compose logs -f
-
-# Parar
-docker-compose down
-
-# Reiniciar
-docker-compose restart
-```
+**Para o TCC**: Na maioria dos casos, a **Opção 1 ou 2** é suficiente.
 
 ---
 
