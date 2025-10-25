@@ -1,0 +1,330 @@
+{
+  "description": "Exemplos de configuração para diferentes cenários de simulação",
+  "examples": {
+
+    "scenario_1_normal_flow": {
+      "description": "Fluxo normal - horário comercial",
+      "upas": {
+        "UPA Dinamérica": {
+          "enabled": true,
+          "patient_flow": {
+            "mode": "per_hour",
+            "rate": 15
+          },
+          "classificacao_distribution": {
+            "VERMELHO": 0.05,
+            "AMARELO": 0.25,
+            "VERDE": 0.50,
+            "AZUL": 0.20
+          }
+        },
+        "UPA Alto Branco": {
+          "enabled": true,
+          "patient_flow": {
+            "mode": "per_hour",
+            "rate": 18
+          },
+          "classificacao_distribution": {
+            "VERMELHO": 0.08,
+            "AMARELO": 0.30,
+            "VERDE": 0.45,
+            "AZUL": 0.17
+          }
+        }
+      },
+      "simulation": {
+        "real_time_factor": 1.0
+      }
+    },
+
+    "scenario_2_peak_hours": {
+      "description": "Horário de pico - alta demanda (18h-22h)",
+      "upas": {
+        "UPA Dinamérica": {
+          "enabled": true,
+          "patient_flow": {
+            "mode": "per_hour",
+            "rate": 35
+          },
+          "classificacao_distribution": {
+            "VERMELHO": 0.08,
+            "AMARELO": 0.32,
+            "VERDE": 0.45,
+            "AZUL": 0.15
+          }
+        },
+        "UPA Alto Branco": {
+          "enabled": true,
+          "patient_flow": {
+            "mode": "per_hour",
+            "rate": 40
+          },
+          "classificacao_distribution": {
+            "VERMELHO": 0.10,
+            "AMARELO": 0.35,
+            "VERDE": 0.40,
+            "AZUL": 0.15
+          }
+        }
+      },
+      "simulation": {
+        "real_time_factor": 1.0
+      }
+    },
+
+    "scenario_3_overnight": {
+      "description": "Madrugada - baixa demanda (00h-06h)",
+      "upas": {
+        "UPA Dinamérica": {
+          "enabled": true,
+          "patient_flow": {
+            "mode": "per_hour",
+            "rate": 6
+          },
+          "classificacao_distribution": {
+            "VERMELHO": 0.12,
+            "AMARELO": 0.28,
+            "VERDE": 0.40,
+            "AZUL": 0.20
+          }
+        },
+        "UPA Alto Branco": {
+          "enabled": true,
+          "patient_flow": {
+            "mode": "per_hour",
+            "rate": 8
+          },
+          "classificacao_distribution": {
+            "VERMELHO": 0.15,
+            "AMARELO": 0.30,
+            "VERDE": 0.38,
+            "AZUL": 0.17
+          }
+        }
+      },
+      "simulation": {
+        "real_time_factor": 1.0
+      }
+    },
+
+    "scenario_4_single_upa_test": {
+      "description": "Teste com apenas uma UPA",
+      "upas": {
+        "UPA Dinamérica": {
+          "enabled": true,
+          "patient_flow": {
+            "mode": "per_hour",
+            "rate": 20
+          }
+        },
+        "UPA Alto Branco": {
+          "enabled": false
+        }
+      },
+      "simulation": {
+        "real_time_factor": 1.0
+      }
+    },
+
+    "scenario_5_fast_test": {
+      "description": "Teste rápido - simulação 10x mais rápida",
+      "upas": {
+        "UPA Dinamérica": {
+          "enabled": true,
+          "patient_flow": {
+            "mode": "per_minute",
+            "rate": 2
+          }
+        },
+        "UPA Alto Branco": {
+          "enabled": true,
+          "patient_flow": {
+            "mode": "per_minute",
+            "rate": 3
+          }
+        }
+      },
+      "simulation": {
+        "real_time_factor": 10.0,
+        "triagem_time_seconds": {
+          "min": 60,
+          "max": 180
+        },
+        "atendimento_time_seconds": {
+          "VERMELHO": {"min": 300, "max": 900},
+          "AMARELO": {"min": 240, "max": 600},
+          "VERDE": {"min": 180, "max": 450},
+          "AZUL": {"min": 120, "max": 300}
+        }
+      }
+    },
+
+    "scenario_6_stress_test": {
+      "description": "Teste de estresse - alta carga",
+      "upas": {
+        "UPA Dinamérica": {
+          "enabled": true,
+          "patient_flow": {
+            "mode": "per_minute",
+            "rate": 5
+          },
+          "classificacao_distribution": {
+            "VERMELHO": 0.15,
+            "AMARELO": 0.35,
+            "VERDE": 0.35,
+            "AZUL": 0.15
+          }
+        },
+        "UPA Alto Branco": {
+          "enabled": true,
+          "patient_flow": {
+            "mode": "per_minute",
+            "rate": 6
+          },
+          "classificacao_distribution": {
+            "VERMELHO": 0.20,
+            "AMARELO": 0.40,
+            "VERDE": 0.30,
+            "AZUL": 0.10
+          }
+        }
+      },
+      "simulation": {
+        "real_time_factor": 2.0
+      }
+    },
+
+    "scenario_7_realistic_day": {
+      "description": "Simulação de um dia completo (24h) em modo acelerado",
+      "comment": "Use real_time_factor: 24.0 para simular 1 dia em 1 hora",
+      "upas": {
+        "UPA Dinamérica": {
+          "enabled": true,
+          "patient_flow": {
+            "mode": "per_day",
+            "rate": 360
+          }
+        },
+        "UPA Alto Branco": {
+          "enabled": true,
+          "patient_flow": {
+            "mode": "per_day",
+            "rate": 432
+          }
+        }
+      },
+      "simulation": {
+        "real_time_factor": 24.0
+      }
+    },
+
+    "scenario_8_high_emergency": {
+      "description": "Alta taxa de emergências (situação crítica)",
+      "upas": {
+        "UPA Dinamérica": {
+          "enabled": true,
+          "patient_flow": {
+            "mode": "per_hour",
+            "rate": 25
+          },
+          "classificacao_distribution": {
+            "VERMELHO": 0.25,
+            "AMARELO": 0.40,
+            "VERDE": 0.25,
+            "AZUL": 0.10
+          }
+        },
+        "UPA Alto Branco": {
+          "enabled": true,
+          "patient_flow": {
+            "mode": "per_hour",
+            "rate": 28
+          },
+          "classificacao_distribution": {
+            "VERMELHO": 0.30,
+            "AMARELO": 0.40,
+            "VERDE": 0.20,
+            "AZUL": 0.10
+          }
+        }
+      },
+      "simulation": {
+        "real_time_factor": 1.0
+      }
+    },
+
+    "scenario_9_low_priority_focus": {
+      "description": "Maioria de casos de baixa prioridade",
+      "upas": {
+        "UPA Dinamérica": {
+          "enabled": true,
+          "patient_flow": {
+            "mode": "per_hour",
+            "rate": 20
+          },
+          "classificacao_distribution": {
+            "VERMELHO": 0.02,
+            "AMARELO": 0.08,
+            "VERDE": 0.40,
+            "AZUL": 0.50
+          }
+        },
+        "UPA Alto Branco": {
+          "enabled": true,
+          "patient_flow": {
+            "mode": "per_hour",
+            "rate": 22
+          },
+          "classificacao_distribution": {
+            "VERMELHO": 0.03,
+            "AMARELO": 0.10,
+            "VERDE": 0.37,
+            "AZUL": 0.50
+          }
+        }
+      },
+      "simulation": {
+        "real_time_factor": 1.0
+      }
+    },
+
+    "scenario_10_different_rates_per_upa": {
+      "description": "Taxas muito diferentes entre UPAs (para comparação)",
+      "upas": {
+        "UPA Dinamérica": {
+          "enabled": true,
+          "patient_flow": {
+            "mode": "per_hour",
+            "rate": 10
+          }
+        },
+        "UPA Alto Branco": {
+          "enabled": true,
+          "patient_flow": {
+            "mode": "per_hour",
+            "rate": 40
+          }
+        }
+      },
+      "simulation": {
+        "real_time_factor": 1.0
+      }
+    }
+
+  },
+
+  "how_to_use": {
+    "step_1": "Escolha o cenário que deseja simular",
+    "step_2": "Copie a seção 'upas' e 'simulation' do cenário escolhido",
+    "step_3": "Cole no arquivo config.json principal, substituindo as seções correspondentes",
+    "step_4": "Ajuste os valores conforme necessário",
+    "step_5": "Reinicie o simulador"
+  },
+
+  "tips": {
+    "real_time_factor": "Use valores maiores que 1.0 para acelerar a simulação durante testes",
+    "patient_flow_mode": "Use 'per_hour' para configuração mais intuitiva no dia a dia",
+    "classificacao_distribution": "Baseie-se em dados reais da UPA para distribuição realista",
+    "monitoring": "Monitore os logs para identificar gargalos e ajustar a configuração"
+  }
+}
