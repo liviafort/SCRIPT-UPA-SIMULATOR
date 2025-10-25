@@ -1,10 +1,11 @@
 #!/bin/bash
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 VENV_DIR="$SCRIPT_DIR/venv"
-PYTHON_SCRIPT="$SCRIPT_DIR/upa_simulator.py"
-CONFIG_FILE="$SCRIPT_DIR/config.json"
+PYTHON_SCRIPT="$SCRIPT_DIR/src/upa_simulator.py"
+CONFIG_FILE="$SCRIPT_DIR/config/config.json"
 LOG_FILE="$SCRIPT_DIR/upa_simulator.log"
 PID_FILE="$SCRIPT_DIR/upa_simulator.pid"
+REQUIREMENTS_FILE="$SCRIPT_DIR/src/requirements.txt"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -35,7 +36,7 @@ check_requirements() {
         print_success "Ambiente virtual criado"
 
         print_info "Instalando dependências..."
-        "$VENV_DIR/bin/pip" install -r "$SCRIPT_DIR/requirements.txt"
+        "$VENV_DIR/bin/pip" install -r "$REQUIREMENTS_FILE"
         print_success "Dependências instaladas"
     fi
 

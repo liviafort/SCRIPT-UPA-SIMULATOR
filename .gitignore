@@ -42,10 +42,11 @@ logs/
 
 .ipynb_checkpoints
 
-config.json
-config.local.json
+# Configuração real (não vai pro git)
+config/config.json
 
-!config.examples.json
+# Configuração de exemplo (vai pro git)
+!config/config.example.json
 
 *.tmp
 *.temp

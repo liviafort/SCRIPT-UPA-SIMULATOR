@@ -18,7 +18,7 @@
       "enabled": true,
       "patient_flow": {
         "mode": "per_hour",
-        "rate": 12
+        "rate": 20
       },
       "bairros": [
         "Dinamérica",
@@ -38,7 +38,7 @@
       "enabled": true,
       "patient_flow": {
         "mode": "per_hour",
-        "rate": 15
+        "rate": 18
       },
       "bairros": [
         "Alto Branco",
@@ -58,21 +58,21 @@
   "simulation": {
     "real_time_factor": 1.0,
     "triagem_time_seconds": {
-      "min": 180,
-      "max": 600
+      "min": 60,
+      "max": 240
     },
     "atendimento_time_seconds": {
-      "VERMELHO": {"min": 1200, "max": 3600},
-      "AMARELO": {"min": 900, "max": 2400},
-      "VERDE": {"min": 600, "max": 1800},
-      "AZUL": {"min": 300, "max": 1200}
+      "VERMELHO": {"min": 900, "max": 2400},
+      "AMARELO": {"min": 600, "max": 1800},
+      "VERDE": {"min": 300, "max": 900},
+      "AZUL": {"min": 180, "max": 600}
     },
-    "max_wait_before_triagem_seconds": 1800,
+    "max_wait_before_triagem_seconds": 720,
     "logging": {
       "level": "INFO",
       "file": "upa_simulator.log",
-      "max_bytes": 10485760,
-      "backup_count": 5
+      "max_bytes": 5242880,
+      "backup_count": 2
     }
   },
   "manchester_protocol": {
@@ -96,5 +96,16 @@
       "priority": 4,
       "description": "Pouco urgente - Atendimento em até 240 minutos"
     }
+  },
+  "comments": {
+    "urls": "Configure as URLs dos seus serviços aqui (gateway e monitoring)",
+    "patient_flow_modes": [
+      "per_minute: taxa de pacientes por minuto",
+      "per_hour: taxa de pacientes por hora",
+      "per_day: taxa de pacientes por dia"
+    ],
+    "real_time_factor": "1.0 = tempo real, 2.0 = 2x mais rápido, 0.5 = 2x mais lento",
+    "classificacao_distribution": "Distribuição de probabilidade das classificações (deve somar 1.0)",
+    "tempos_realistas": "Baseado em estudo SciELO (Manchester): triagem 1-4min (mediana 2min), atendimento varia por classificação"
   }
 }
