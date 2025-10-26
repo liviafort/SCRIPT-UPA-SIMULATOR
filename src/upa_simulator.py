@@ -236,13 +236,16 @@ class UPASimulator:
             thread.start()
             self.threads.append(thread)
 
-        triagem_thread = threading.Thread(
-            target=self._triagem_processing_loop,
-            name="Triagem-Processor",
-            daemon=True
-        )
-        triagem_thread.start()
-        self.threads.append(triagem_thread)
+        # Thread de triagem para CADA UPA (processamento paralelo)
+        for upa_name in self.upas.keys():
+            triagem_thread = threading.Thread(
+                target=self._triagem_processing_loop,
+                args=(upa_name,),
+                name=f"Triagem-{upa_name}",
+                daemon=True
+            )
+            triagem_thread.start()
+            self.threads.append(triagem_thread)
 
         # Thread de atendimento para CADA UPA (processamento paralelo)
         for upa_name in self.upas.keys():
@@ -357,26 +360,27 @@ class UPASimulator:
         else:
             logging.warning(f"Falha ao registrar entrada: paciente {patient.patient_id[:8]}")
 
-    def _triagem_processing_loop(self):
+    def _triagem_processing_loop(self, upa_name: str):
         """
         Loop de processamento de triagem - FIFO (ordem de chegada)
         AQUI é feita a classificação de Manchester (não antes)
+        Uma thread por UPA para processamento paralelo
         """
         triagem_config = self.config["simulation"]["triagem_time_seconds"]
         real_time_factor = self.config["simulation"]["real_time_factor"]
 
         while self.running:
             try:
-                for upa_name in self.upas.keys():
-                    fila = self.fila_triagem[upa_name]
+                fila = self.fila_triagem[upa_name]
 
+                if fila.empty():
+                    time.sleep(1)
+                    continue
+
+                with self.fila_triagem_locks[upa_name]:
                     if fila.empty():
                         continue
-
-                    with self.fila_triagem_locks[upa_name]:
-                        if fila.empty():
-                            continue
-                        patient = fila.get()
+                    patient = fila.get()
 
                     triagem_time = random.randint(
                         triagem_config["min"],
@@ -406,10 +410,8 @@ class UPASimulator:
                         f"{patient.classificacao.name} (P{patient.classificacao.prioridade})"
                     )
 
-                time.sleep(1)
-
             except Exception as e:
-                logging.error(f"Erro no loop de triagem: {e}")
+                logging.error(f"Erro no loop de triagem [{upa_name}]: {e}")
                 time.sleep(5)
 
     def _assign_classificacao(self, distribution: Dict[str, float]) -> ClassificacaoTriagem:
