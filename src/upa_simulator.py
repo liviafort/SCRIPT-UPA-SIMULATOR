@@ -244,13 +244,16 @@ class UPASimulator:
         triagem_thread.start()
         self.threads.append(triagem_thread)
 
-        atendimento_thread = threading.Thread(
-            target=self._atendimento_processing_loop,
-            name="Atendimento-Processor",
-            daemon=True
-        )
-        atendimento_thread.start()
-        self.threads.append(atendimento_thread)
+        # Thread de atendimento para CADA UPA (processamento paralelo)
+        for upa_name in self.upas.keys():
+            atendimento_thread = threading.Thread(
+                target=self._atendimento_processing_loop,
+                args=(upa_name,),
+                name=f"Atendimento-{upa_name}",
+                daemon=True
+            )
+            atendimento_thread.start()
+            self.threads.append(atendimento_thread)
 
         monitor_thread = threading.Thread(
             target=self._monitoring_loop,
@@ -439,23 +442,25 @@ class UPASimulator:
         else:
             logging.warning(f"Falha ao registrar triagem: paciente {patient.patient_id[:8]}")
 
-    def _atendimento_processing_loop(self):
-        """Loop de processamento de atendimento - PRIORIZADO (Protocolo de Manchester)"""
+    def _atendimento_processing_loop(self, upa_name: str):
+        """Loop de processamento de atendimento - PRIORIZADO (Protocolo de Manchester)
+        Uma thread por UPA para processamento paralelo
+        """
         atendimento_config = self.config["simulation"]["atendimento_time_seconds"]
         real_time_factor = self.config["simulation"]["real_time_factor"]
 
         while self.running:
             try:
-                for upa_name in self.upas.keys():
-                    fila = self.fila_atendimento[upa_name]
+                fila = self.fila_atendimento[upa_name]
 
+                if fila.empty():
+                    time.sleep(1)
+                    continue
+
+                with self.fila_atendimento_locks[upa_name]:
                     if fila.empty():
                         continue
-
-                    with self.fila_atendimento_locks[upa_name]:
-                        if fila.empty(): 
-                            continue
-                        patient = fila.get()
+                    patient = fila.get()
 
                     wait_time = (datetime.now() - patient.triagem_timestamp).total_seconds() / 60
                     max_wait = patient.classificacao.max_wait_minutes
@@ -499,10 +504,8 @@ class UPASimulator:
                         f"[{patient.classificacao.name}] (total: {total_time:.1f}min)"
                     )
 
-                time.sleep(1)
-
             except Exception as e:
-                logging.error(f"Erro no loop de atendimento: {e}")
+                logging.error(f"Erro no loop de atendimento [{upa_name}]: {e}")
                 time.sleep(5)
 
     def _register_atendimento(self, patient: Patient):
