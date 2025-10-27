@@ -79,13 +79,10 @@ class TimeVariabilityCalculator:
         Returns:
             Tuple[float, str]: (tempo_ajustado, motivo)
         """
-        # Triagem geralmente é mais rápida e padronizada
-        # Apenas pausas e trocas afetam
-        if random.random() < cls.PAUSA_PROBABILITY / 2:  # Metade da chance
-            return base_time * 1.3, "Pausa enfermeiro"
-
-        if random.random() < cls.TROCA_TURNO_PROBABILITY:
-            return base_time * 1.6, "Troca de turno"
+        # Triagem DEVE ser rápida para formar filas no atendimento
+        # Variabilidade mínima (apenas 2% de chance de atraso)
+        if random.random() < 0.02:  # 2% de chance
+            return base_time * 1.2, "Pausa enfermeiro"
 
         return base_time, "Normal"
 
