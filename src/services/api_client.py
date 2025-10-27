@@ -47,11 +47,16 @@ class APIClient:
         """
         try:
             url = f"{self.base_url}{endpoint}"
+            headers = {
+                "Content-Type": "application/json",
+                "User-Agent": "Mozilla/5.0 (compatible; UPA-Simulator/1.0)",
+                "Accept": "application/json"
+            }
             response = self.session.post(
                 url,
                 json=data,
                 timeout=self.timeout,
-                headers={"Content-Type": "application/json"}
+                headers=headers
             )
             response.raise_for_status()
             return response.json()

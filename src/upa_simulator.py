@@ -277,6 +277,7 @@ class UPASimulator:
         data = {
             "patientId": patient.patient_id,
             "upaId": patient.upa_id,
+            "bairro": patient.bairro,
             "timestamp": patient.entrada_timestamp.isoformat()
         }
 
