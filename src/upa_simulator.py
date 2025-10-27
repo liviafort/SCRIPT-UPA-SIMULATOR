@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+"""
+Simulador de Fluxo de Pacientes UPA - Protocolo de Manchester
+Campina Grande - PB
+"""
 
 import json
 import logging
@@ -6,57 +10,19 @@ import random
 import threading
 import time
 import uuid
-from dataclasses import dataclass, field
-from datetime import datetime, timedelta
-from enum import Enum
+from dataclasses import dataclass
+from datetime import datetime
 from logging.handlers import RotatingFileHandler
 from queue import PriorityQueue, Queue
-from typing import Dict, List, Optional
-import requests
-from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
-
-
-class ClassificacaoTriagem(Enum):
-    VERMELHO = (1, 5, "Emergência - Atendimento em até 5 minutos")
-    AMARELO = (2, 15, "Muito urgente - Atendimento em até 15 minutos")
-    VERDE = (3, 60, "Urgente - Atendimento em até 60 minutos")
-    AZUL = (4, 120, "Pouco urgente - Atendimento em até 120 minutos")
-
-    def __init__(self, prioridade: int, max_wait_minutes: int, descricao: str):
-        self.prioridade = prioridade
-        self.max_wait_minutes = max_wait_minutes
-        self.descricao = descricao
-
-
-class PatientStatus(Enum):
-    AGUARDANDO_TRIAGEM = "AGUARDANDO_TRIAGEM"
-    AGUARDANDO_ATENDIMENTO = "AGUARDANDO_ATENDIMENTO"
-    EM_ATENDIMENTO = "EM_ATENDIMENTO"
-    FINALIZADO = "FINALIZADO"
-
-
-@dataclass
-class Patient:
-    patient_id: str
-    upa_id: str
-    upa_name: str
-    bairro: str
-    status: PatientStatus
-    classificacao: Optional[ClassificacaoTriagem] = None
-    entrada_timestamp: Optional[datetime] = None
-    triagem_timestamp: Optional[datetime] = None
-    atendimento_timestamp: Optional[datetime] = None
-    finalizacao_timestamp: Optional[datetime] = None
-
-    def __lt__(self, other):
-        if self.classificacao and other.classificacao:
-            return self.classificacao.prioridade < other.classificacao.prioridade
-        return False
+from typing import Dict, List
+from models import Patient, PatientStatus, ClassificacaoTriagem
+from services import APIClient, DemandCalculator
+from utils import TimeVariabilityCalculator
 
 
 @dataclass
 class UPAConfig:
+    """Configuração de uma UPA"""
     name: str
     uuid: str
     enabled: bool
@@ -66,78 +32,35 @@ class UPAConfig:
     classificacao_distribution: Dict[str, float]
 
 
-class APIClient:
-
-    def __init__(self, base_url: str, timeout: int = 10):
-        self.base_url = base_url
-        self.timeout = timeout
-        self.session = requests.Session()
-
-        retry_strategy = Retry(
-            total=3,
-            backoff_factor=1,
-            status_forcelist=[429, 500, 502, 503, 504],
-            allowed_methods=["HEAD", "GET", "POST", "PUT", "DELETE", "OPTIONS", "TRACE"]
-        )
-        adapter = HTTPAdapter(max_retries=retry_strategy)
-        self.session.mount("http://", adapter)
-        self.session.mount("https://", adapter)
-
-    def post(self, endpoint: str, data: dict) -> Optional[dict]:
-        try:
-            url = f"{self.base_url}{endpoint}"
-            response = self.session.post(
-                url,
-                json=data,
-                timeout=self.timeout,
-                headers={"Content-Type": "application/json"}
-            )
-            response.raise_for_status()
-            return response.json()
-        except requests.exceptions.RequestException as e:
-            logging.error(f"Erro ao fazer POST para {endpoint}: {e}")
-            return None
-
-    def get(self, endpoint: str) -> Optional[dict]:
-        try:
-            url = f"{self.base_url}{endpoint}"
-            response = self.session.get(url, timeout=self.timeout)
-            response.raise_for_status()
-            return response.json()
-        except requests.exceptions.RequestException as e:
-            logging.error(f"Erro ao fazer GET de {endpoint}: {e}")
-            return None
-
-
 class UPASimulator:
+    """Simulador principal de fluxo de pacientes UPA"""
+
     def __init__(self, config_path: str = "config.json"):
         self.config = self._load_config(config_path)
         self.monitoring_client = APIClient(self.config["monitoring_service"]["base_url"])
         self.gateway_client = APIClient(self.config["gateway_service"]["base_url"])
 
         self.upas: Dict[str, UPAConfig] = {}
-        self.fila_triagem: Dict[str, Queue] = {} 
-        self.fila_atendimento: Dict[str, PriorityQueue] = {}  
-        self.active_patients: Dict[str, Patient] = {}
+        self.demand_calculators: Dict[str, DemandCalculator] = {}
 
+        self.fila_triagem: Dict[str, Queue] = {}
+        self.fila_atendimento: Dict[str, PriorityQueue] = {}
         self.fila_triagem_locks: Dict[str, threading.Lock] = {}
         self.fila_atendimento_locks: Dict[str, threading.Lock] = {}
+
+        self.active_patients: Dict[str, Patient] = {}
         self.active_patients_lock = threading.Lock()
 
-        self.running = False
+        self.running = True
         self.threads: List[threading.Thread] = []
 
-        self._setup_logging()
-
     def _load_config(self, config_path: str) -> dict:
-        try:
-            with open(config_path, 'r', encoding='utf-8') as f:
-                return json.load(f)
-        except Exception as e:
-            print(f"Erro ao carregar configuração: {e}")
-            raise
+        """Carrega configuração do arquivo JSON"""
+        with open(config_path, 'r', encoding='utf-8') as f:
+            return json.load(f)
 
     def _setup_logging(self):
+        """Configura sistema de logs"""
         log_config = self.config["simulation"]["logging"]
 
         formatter = logging.Formatter(
@@ -161,74 +84,81 @@ class UPASimulator:
         logger.addHandler(console_handler)
 
     def initialize(self):
+        """Inicializa o simulador"""
         logging.info("Iniciando UPA Simulator - Protocolo de Manchester")
 
         self._fetch_upas()
 
-        for upa_name in self.upas.keys():
+        for upa_name, upa_config in self.upas.items():
             self.fila_triagem[upa_name] = Queue()
             self.fila_atendimento[upa_name] = PriorityQueue()
             self.fila_triagem_locks[upa_name] = threading.Lock()
             self.fila_atendimento_locks[upa_name] = threading.Lock()
 
+            base_rate = DemandCalculator.get_recommended_rates().get(
+                upa_name,
+                upa_config.flow_rate
+            )
+            self.demand_calculators[upa_name] = DemandCalculator(base_rate)
+
         logging.info(f"Simulador inicializado com {len(self.upas)} UPA(s)")
         logging.info("Protocolo de Manchester: Classificação na triagem, atendimento priorizado")
+        logging.info("MODO: Taxas aumentadas para forçar formação de filas")
+
         for upa_name, upa_config in self.upas.items():
-            logging.info(f"  - {upa_name}: {upa_config.flow_rate} pacientes/{upa_config.flow_mode}")
+            peak_info = self.demand_calculators[upa_name].get_peak_info()
+            logging.info(
+                f"  - {upa_name}: {peak_info['current_rate']:.1f} pacientes/hora "
+                f"(hora {peak_info['hour']}h - {peak_info['peak_type'] or 'normal'})"
+            )
 
     def _fetch_upas(self):
+        """Busca UPAs da API"""
         logging.info("Buscando UPAs da API...")
 
         endpoint = self.config["gateway_service"]["endpoints"]["upas"]
         response = self.gateway_client.get(endpoint)
 
-        if not response or "data" not in response:
-            logging.error("Falha ao buscar UPAs da API. Usando configuração local.")
-            self._use_mock_upas()
+        if not response:
+            logging.error("Falha ao buscar UPAs da API")
             return
 
-        upas_api = response["data"]
+        upas_api = response.get("upas", [])
         logging.info(f"Encontradas {len(upas_api)} UPA(s) na API")
+
+        config_upas = self.config.get("upas", {})
 
         for upa_data in upas_api:
             upa_name = upa_data["name"]
 
-            if upa_name in self.config["upas"] and self.config["upas"][upa_name]["enabled"]:
-                upa_local_config = self.config["upas"][upa_name]
+            if upa_name not in config_upas:
+                continue
 
-                self.upas[upa_name] = UPAConfig(
-                    name=upa_name,
-                    uuid=upa_data["id"],
-                    enabled=True,
-                    flow_mode=upa_local_config["patient_flow"]["mode"],
-                    flow_rate=upa_local_config["patient_flow"]["rate"],
-                    bairros=upa_local_config["bairros"],
-                    classificacao_distribution=upa_local_config["classificacao_distribution"]
-                )
+            upa_config_data = config_upas[upa_name]
 
-                logging.info(f"UPA configurada: {upa_name} (UUID: {upa_data['id']})")
+            if not upa_config_data.get("enabled", True):
+                continue
 
-    def _use_mock_upas(self):
-        logging.warning("Usando UUIDs mockados para UPAs")
+            flow_config = upa_config_data["patient_flow"]
+            flow_rate = flow_config["rate"]
 
-        for upa_name, upa_config in self.config["upas"].items():
-            if upa_config["enabled"]:
-                self.upas[upa_name] = UPAConfig(
-                    name=upa_name,
-                    uuid=str(uuid.uuid4()),
-                    enabled=True,
-                    flow_mode=upa_config["patient_flow"]["mode"],
-                    flow_rate=upa_config["patient_flow"]["rate"],
-                    bairros=upa_config["bairros"],
-                    classificacao_distribution=upa_config["classificacao_distribution"]
-                )
+            self.upas[upa_name] = UPAConfig(
+                name=upa_name,
+                uuid=upa_data["id"],
+                enabled=True,
+                flow_mode=flow_config["mode"],
+                flow_rate=flow_rate,
+                bairros=upa_config_data["bairros"],
+                classificacao_distribution=upa_config_data["classificacao_distribution"]
+            )
+
+            logging.info(f"UPA configurada: {upa_name} (UUID: {upa_data['id']})")
 
     def start(self):
-        self.running = True
-
+        """Inicia threads de simulação"""
         for upa_name in self.upas.keys():
             thread = threading.Thread(
-                target=self._patient_entry_loop,
+                target=self._entry_loop,
                 args=(upa_name,),
                 name=f"Entry-{upa_name}",
                 daemon=True
@@ -236,7 +166,6 @@ class UPASimulator:
             thread.start()
             self.threads.append(thread)
 
-        # Thread de triagem para CADA UPA (processamento paralelo)
         for upa_name in self.upas.keys():
             triagem_thread = threading.Thread(
                 target=self._triagem_processing_loop,
@@ -247,7 +176,6 @@ class UPASimulator:
             triagem_thread.start()
             self.threads.append(triagem_thread)
 
-        # Thread de atendimento para CADA UPA (processamento paralelo)
         for upa_name in self.upas.keys():
             atendimento_thread = threading.Thread(
                 target=self._atendimento_processing_loop,
@@ -285,34 +213,36 @@ class UPASimulator:
 
         logging.info("Simulação finalizada")
 
-    def _patient_entry_loop(self, upa_name: str):
-        """Loop de geração de entradas de pacientes para uma UPA"""
+    def _entry_loop(self, upa_name: str):
+        """Loop de entrada de pacientes - usa demanda variável por horário"""
         upa_config = self.upas[upa_name]
+        demand_calc = self.demand_calculators[upa_name]
 
-        if upa_config.flow_mode == "per_minute":
-            interval = 60.0 / upa_config.flow_rate
-        elif upa_config.flow_mode == "per_hour":
-            interval = 3600.0 / upa_config.flow_rate
-        elif upa_config.flow_mode == "per_day":
-            interval = 86400.0 / upa_config.flow_rate
-        else:
-            interval = 300
-
-        real_time_factor = self.config["simulation"]["real_time_factor"]
-        interval = interval / real_time_factor
-
-        logging.info(f"[{upa_name}] Entrada de pacientes: 1 a cada {interval:.1f}s")
+        last_peak_log = None
 
         while self.running:
             try:
+                interval = demand_calc.get_interval_seconds()
+                peak_info = demand_calc.get_peak_info()
+
+                current_hour = peak_info['hour']
+                if current_hour != last_peak_log:
+                    if peak_info['is_peak']:
+                        logging.info(
+                            f"[{upa_name}] {peak_info['peak_type']}: "
+                            f"{peak_info['current_rate']:.0f} pac/h "
+                            f"(intervalo: {interval:.0f}s)"
+                        )
+                    last_peak_log = current_hour
+
                 patient = self._create_patient(upa_config)
+                patient.entrada_timestamp = datetime.now()
 
-                self._register_entrada(patient)
-
-                # Adiciona à fila de triagem FIFO (ordem de chegada, sem classificação)
                 with self.fila_triagem_locks[upa_name]:
                     self.fila_triagem[upa_name].put(patient)
                     fila_size = self.fila_triagem[upa_name].qsize()
+
+                self._register_entrada(patient)
 
                 with self.active_patients_lock:
                     self.active_patients[patient.patient_id] = patient
@@ -329,10 +259,7 @@ class UPASimulator:
                 time.sleep(5)
 
     def _create_patient(self, upa_config: UPAConfig) -> Patient:
-        """
-        Cria paciente na entrada (recepção)
-        Paciente fornece apenas dados pessoais, SEM classificação
-        """
+        """Cria novo paciente SEM classificação (feita na triagem)"""
         return Patient(
             patient_id=str(uuid.uuid4()),
             upa_id=upa_config.uuid,
@@ -344,12 +271,12 @@ class UPASimulator:
         )
 
     def _register_entrada(self, patient: Patient):
+        """Registra entrada no serviço de monitoramento"""
         endpoint = self.config["monitoring_service"]["endpoints"]["entrada"]
 
         data = {
             "patientId": patient.patient_id,
             "upaId": patient.upa_id,
-            "bairro": patient.bairro,
             "timestamp": patient.entrada_timestamp.isoformat()
         }
 
@@ -362,9 +289,8 @@ class UPASimulator:
 
     def _triagem_processing_loop(self, upa_name: str):
         """
-        Loop de processamento de triagem - FIFO (ordem de chegada)
-        AQUI é feita a classificação de Manchester (não antes)
-        Uma thread por UPA para processamento paralelo
+        Loop de processamento de triagem - FIFO
+        COM variabilidade de tempo (pausas, trocas)
         """
         triagem_config = self.config["simulation"]["triagem_time_seconds"]
         real_time_factor = self.config["simulation"]["real_time_factor"]
@@ -382,40 +308,43 @@ class UPASimulator:
                         continue
                     patient = fila.get()
 
-                    triagem_time = random.randint(
-                        triagem_config["min"],
-                        triagem_config["max"]
-                    ) / real_time_factor
+                base_time = random.randint(
+                    triagem_config["min"],
+                    triagem_config["max"]
+                ) / real_time_factor
 
-                    logging.info(
-                        f"[{upa_name}] Triagem: Paciente {patient.patient_id[:8]} "
-                        f"({triagem_time:.0f}s)"
-                    )
+                triagem_time, reason = TimeVariabilityCalculator.apply_triagem_variability(base_time)
 
-                    time.sleep(triagem_time)
+                reason_msg = f" ({reason})" if reason != "Normal" else ""
+                logging.info(
+                    f"[{upa_name}] Triagem: Paciente {patient.patient_id[:8]} "
+                    f"({triagem_time:.0f}s{reason_msg})"
+                )
 
-                    patient.classificacao = self._assign_classificacao(
-                        self.upas[upa_name].classificacao_distribution
-                    )
-                    patient.triagem_timestamp = datetime.now()
-                    patient.status = PatientStatus.AGUARDANDO_ATENDIMENTO
+                time.sleep(triagem_time)
 
-                    self._register_triagem(patient)
+                patient.classificacao = self._assign_classificacao(
+                    self.upas[upa_name].classificacao_distribution
+                )
+                patient.triagem_timestamp = datetime.now()
+                patient.status = PatientStatus.AGUARDANDO_ATENDIMENTO
 
-                    with self.fila_atendimento_locks[upa_name]:
-                        self.fila_atendimento[upa_name].put(patient)
+                self._register_triagem(patient)
 
-                    logging.info(
-                        f"[{upa_name}] Classificação: Paciente {patient.patient_id[:8]} -> "
-                        f"{patient.classificacao.name} (P{patient.classificacao.prioridade})"
-                    )
+                with self.fila_atendimento_locks[upa_name]:
+                    self.fila_atendimento[upa_name].put(patient)
+
+                logging.info(
+                    f"[{upa_name}] Classificação: Paciente {patient.patient_id[:8]} -> "
+                    f"{patient.classificacao.name} (P{patient.classificacao.prioridade})"
+                )
 
             except Exception as e:
                 logging.error(f"Erro no loop de triagem [{upa_name}]: {e}")
                 time.sleep(5)
 
     def _assign_classificacao(self, distribution: Dict[str, float]) -> ClassificacaoTriagem:
-        """Atribui classificação de Manchester baseada em distribuição de probabilidade"""
+        """Atribui classificação de Manchester baseada em distribuição"""
         rand = random.random()
         cumulative = 0.0
 
@@ -427,7 +356,7 @@ class UPASimulator:
         return ClassificacaoTriagem.VERDE
 
     def _register_triagem(self, patient: Patient):
-        """Registra evento de triagem no serviço de monitoramento"""
+        """Registra triagem no serviço de monitoramento"""
         endpoint = self.config["monitoring_service"]["endpoints"]["triagem"]
 
         data = {
@@ -445,8 +374,9 @@ class UPASimulator:
             logging.warning(f"Falha ao registrar triagem: paciente {patient.patient_id[:8]}")
 
     def _atendimento_processing_loop(self, upa_name: str):
-        """Loop de processamento de atendimento - PRIORIZADO (Protocolo de Manchester)
-        Uma thread por UPA para processamento paralelo
+        """
+        Loop de processamento de atendimento - PRIORIZADO
+        COM variabilidade (pausas, trocas, casos complexos)
         """
         atendimento_config = self.config["simulation"]["atendimento_time_seconds"]
         real_time_factor = self.config["simulation"]["real_time_factor"]
@@ -464,53 +394,61 @@ class UPASimulator:
                         continue
                     patient = fila.get()
 
-                    wait_time = (datetime.now() - patient.triagem_timestamp).total_seconds() / 60
-                    max_wait = patient.classificacao.max_wait_minutes
+                wait_time = (datetime.now() - patient.triagem_timestamp).total_seconds() / 60
+                max_wait = patient.classificacao.max_wait_minutes
 
-                    if wait_time > max_wait and max_wait > 0:
-                        logging.warning(
-                            f"[{upa_name}] ALERTA PROTOCOLO MANCHESTER: Paciente {patient.patient_id[:8]} "
-                            f"({patient.classificacao.name}) aguardou {wait_time:.1f} min "
-                            f"(máximo permitido: {max_wait} min) - TEMPO EXCEDIDO!"
-                        )
-
-                    atend_config = atendimento_config[patient.classificacao.name]
-                    atendimento_time = random.randint(
-                        atend_config["min"],
-                        atend_config["max"]
-                    ) / real_time_factor
-
-                    logging.info(
-                        f"[{upa_name}] Atendimento: Paciente {patient.patient_id[:8]} "
-                        f"[{patient.classificacao.name}] ({atendimento_time:.0f}s, aguardou {wait_time:.1f}min)"
+                if wait_time > max_wait and max_wait > 0:
+                    logging.warning(
+                        f"[{upa_name}] ALERTA PROTOCOLO MANCHESTER: Paciente {patient.patient_id[:8]} "
+                        f"({patient.classificacao.name}) aguardou {wait_time:.1f} min "
+                        f"(máximo: {max_wait} min) - TEMPO EXCEDIDO!"
                     )
 
-                    patient.status = PatientStatus.EM_ATENDIMENTO
-                    patient.atendimento_timestamp = datetime.now()
+                atend_config = atendimento_config[patient.classificacao.name]
+                base_time = random.randint(
+                    atend_config["min"],
+                    atend_config["max"]
+                ) / real_time_factor
 
-                    self._register_atendimento(patient)
+                atendimento_time, reason = TimeVariabilityCalculator.apply_variability(
+                    base_time,
+                    patient.classificacao.name
+                )
 
-                    time.sleep(atendimento_time)
+                reason_msg = f" - {reason}" if reason != "Normal" else ""
+                logging.info(
+                    f"[{upa_name}] Atendimento: Paciente {patient.patient_id[:8]} "
+                    f"[{patient.classificacao.name}] ({atendimento_time:.0f}s, "
+                    f"aguardou {wait_time:.1f}min{reason_msg})"
+                )
 
-                    patient.status = PatientStatus.FINALIZADO
-                    patient.finalizacao_timestamp = datetime.now()
+                patient.status = PatientStatus.EM_ATENDIMENTO
+                patient.atendimento_timestamp = datetime.now()
 
-                    with self.active_patients_lock:
-                        if patient.patient_id in self.active_patients:
-                            del self.active_patients[patient.patient_id]
+                self._register_atendimento(patient)
 
-                    total_time = (patient.finalizacao_timestamp - patient.entrada_timestamp).total_seconds() / 60
+                time.sleep(atendimento_time)
 
-                    logging.info(
-                        f"[{upa_name}] Finalizado: Paciente {patient.patient_id[:8]} "
-                        f"[{patient.classificacao.name}] (total: {total_time:.1f}min)"
-                    )
+                patient.status = PatientStatus.FINALIZADO
+                patient.finalizacao_timestamp = datetime.now()
+
+                with self.active_patients_lock:
+                    if patient.patient_id in self.active_patients:
+                        del self.active_patients[patient.patient_id]
+
+                total_time = (patient.finalizacao_timestamp - patient.entrada_timestamp).total_seconds() / 60
+
+                logging.info(
+                    f"[{upa_name}] Finalizado: Paciente {patient.patient_id[:8]} "
+                    f"[{patient.classificacao.name}] (total: {total_time:.1f}min)"
+                )
 
             except Exception as e:
                 logging.error(f"Erro no loop de atendimento [{upa_name}]: {e}")
                 time.sleep(5)
 
     def _register_atendimento(self, patient: Patient):
+        """Registra atendimento no serviço de monitoramento"""
         endpoint = self.config["monitoring_service"]["endpoints"]["atendimento"]
 
         data = {
@@ -527,22 +465,16 @@ class UPASimulator:
             logging.warning(f"Falha ao registrar atendimento: paciente {patient.patient_id[:8]}")
 
     def _monitoring_loop(self):
-        """Loop de monitoramento e estatísticas"""
+        """Loop de monitoramento - estatísticas a cada minuto"""
         while self.running:
             try:
                 time.sleep(60)
 
-                stats = {
-                    "timestamp": datetime.now().isoformat(),
-                    "upas": {}
-                }
+                stats = {"timestamp": datetime.now().isoformat(), "upas": {}}
 
                 for upa_name in self.upas.keys():
-                    with self.fila_triagem_locks[upa_name]:
-                        fila_triagem_size = self.fila_triagem[upa_name].qsize()
-
-                    with self.fila_atendimento_locks[upa_name]:
-                        fila_atendimento_size = self.fila_atendimento[upa_name].qsize()
+                    fila_triagem_size = self.fila_triagem[upa_name].qsize()
+                    fila_atendimento_size = self.fila_atendimento[upa_name].qsize()
 
                     stats["upas"][upa_name] = {
                         "fila_triagem": fila_triagem_size,
@@ -569,18 +501,14 @@ class UPASimulator:
 
 def main():
     """Função principal"""
-    simulator = UPASimulator(config_path="config.json")
-
-    try:
-        simulator.initialize()
-        simulator.start()
-    except KeyboardInterrupt:
-        logging.info("\nInterrompido pelo usuário")
-    except Exception as e:
-        logging.error(f"Erro fatal: {e}", exc_info=True)
-    finally:
-        simulator.stop()
+    simulator = UPASimulator()
+    simulator._setup_logging()
+    simulator.initialize()
+    simulator.start()
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        logging.info("\nInterrompido pelo usuário")
