@@ -123,7 +123,7 @@ class UPASimulator:
             logging.error("Falha ao buscar UPAs da API")
             return
 
-        upas_api = response.get("upas", [])
+        upas_api = response.get("data", [])
         logging.info(f"Encontradas {len(upas_api)} UPA(s) na API")
 
         config_upas = self.config.get("upas", {})
