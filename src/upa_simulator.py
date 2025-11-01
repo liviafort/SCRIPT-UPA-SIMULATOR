@@ -56,6 +56,7 @@ class UPASimulator:
 
     def _load_config(self, config_path: str) -> dict:
         """Carrega configuração do arquivo JSON"""
+
         with open(config_path, 'r', encoding='utf-8') as f:
             return json.load(f)
 
@@ -217,12 +218,16 @@ class UPASimulator:
         """Loop de entrada de pacientes - usa demanda variável por horário"""
         upa_config = self.upas[upa_name]
         demand_calc = self.demand_calculators[upa_name]
+        min_interval = self.config["simulation"].get("min_entry_interval_seconds", 0)
 
         last_peak_log = None
 
         while self.running:
             try:
                 interval = demand_calc.get_interval_seconds()
+                # Aplica intervalo mínimo se configurado
+                if min_interval > 0:
+                    interval = max(interval, min_interval)
                 peak_info = demand_calc.get_peak_info()
 
                 current_hour = peak_info['hour']
