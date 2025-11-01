@@ -1,6 +1,10 @@
 # Imagem base leve do Python
 FROM python:3.11-slim
 
+# Configurar timezone para America/Sao_Paulo
+ENV TZ=America/Sao_Paulo
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+
 WORKDIR /app
 
 # Copiar requirements
