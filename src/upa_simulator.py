@@ -16,7 +16,8 @@ from logging.handlers import RotatingFileHandler
 from queue import PriorityQueue, Queue
 from typing import Dict, List
 from models import Patient, PatientStatus, ClassificacaoTriagem
-from services import APIClient, DemandCalculator
+from services import APIClient
+from poisson_arrival_generator import PoissonArrivalGenerator
 from utils import TimeVariabilityCalculator
 
 
@@ -41,7 +42,7 @@ class UPASimulator:
         self.gateway_client = APIClient(self.config["gateway_service"]["base_url"])
 
         self.upas: Dict[str, UPAConfig] = {}
-        self.demand_calculators: Dict[str, DemandCalculator] = {}
+        self.poisson_generators: Dict[str, PoissonArrivalGenerator] = {}
 
         self.fila_triagem: Dict[str, Queue] = {}
         self.fila_atendimento: Dict[str, PriorityQueue] = {}
@@ -96,21 +97,18 @@ class UPASimulator:
             self.fila_triagem_locks[upa_name] = threading.Lock()
             self.fila_atendimento_locks[upa_name] = threading.Lock()
 
-            base_rate = DemandCalculator.get_recommended_rates().get(
-                upa_name,
-                upa_config.flow_rate
-            )
-            self.demand_calculators[upa_name] = DemandCalculator(base_rate)
+            # Inicializa gerador Poisson com dados reais
+            self.poisson_generators[upa_name] = PoissonArrivalGenerator(upa_name)
 
         logging.info(f"Simulador inicializado com {len(self.upas)} UPA(s)")
         logging.info("Protocolo de Manchester: Classificação na triagem, atendimento priorizado")
-        logging.info("MODO: Taxas aumentadas para forçar formação de filas")
+        logging.info("MODO: Processo Poisson com taxas baseadas em dados reais")
 
-        for upa_name, upa_config in self.upas.items():
-            peak_info = self.demand_calculators[upa_name].get_peak_info()
+        for upa_name in self.upas.keys():
+            rate_info = self.poisson_generators[upa_name].get_rate_info()
             logging.info(
-                f"  - {upa_name}: {peak_info['current_rate']:.1f} pacientes/hora "
-                f"(hora {peak_info['hour']}h - {peak_info['peak_type'] or 'normal'})"
+                f"  - {upa_name}: {rate_info['current_rate']:.1f} pacientes/hora "
+                f"(hora {rate_info['hour']}h - {rate_info['peak_type']})"
             )
 
     def _fetch_upas(self):
@@ -215,28 +213,36 @@ class UPASimulator:
         logging.info("Simulação finalizada")
 
     def _entry_loop(self, upa_name: str):
-        """Loop de entrada de pacientes - usa demanda variável por horário"""
+        """
+        Loop de entrada de pacientes - Processo Poisson Não-Homogêneo
+
+        Usa distribuição de Poisson com taxa variável por hora do dia (λ(t)).
+        Intervalos entre chegadas seguem distribuição exponencial.
+        """
         upa_config = self.upas[upa_name]
-        demand_calc = self.demand_calculators[upa_name]
+        poisson_gen = self.poisson_generators[upa_name]
         min_interval = self.config["simulation"].get("min_entry_interval_seconds", 0)
 
         last_peak_log = None
 
         while self.running:
             try:
-                interval = demand_calc.get_interval_seconds()
+                # Gera intervalo usando processo Poisson
+                interval = poisson_gen.get_next_interval_seconds()
+
                 # Aplica intervalo mínimo se configurado
                 if min_interval > 0:
                     interval = max(interval, min_interval)
-                peak_info = demand_calc.get_peak_info()
 
-                current_hour = peak_info['hour']
+                rate_info = poisson_gen.get_rate_info()
+
+                current_hour = rate_info['hour']
                 if current_hour != last_peak_log:
-                    if peak_info['is_peak']:
+                    if rate_info['is_peak']:
                         logging.info(
-                            f"[{upa_name}] {peak_info['peak_type']}: "
-                            f"{peak_info['current_rate']:.0f} pac/h "
-                            f"(intervalo: {interval:.0f}s)"
+                            f"[{upa_name}] {rate_info['peak_type']}: "
+                            f"{rate_info['current_rate']:.1f} pac/h "
+                            f"(λ={rate_info['current_rate']:.1f}, intervalo médio: {interval:.0f}s)"
                         )
                     last_peak_log = current_hour
 
@@ -507,7 +513,7 @@ class UPASimulator:
 
 def main():
     """Função principal"""
-    simulator = UPASimulator()
+    simulator = UPASimulator("config/config.json")
     simulator._setup_logging()
     simulator.initialize()
     simulator.start()
