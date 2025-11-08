@@ -47,10 +47,15 @@ class PoissonArrivalGenerator:
                 all_params = json.load(f)
 
             # Busca configuração da UPA
+            # Remove "UPA " do nome para melhor matching
+            upa_name_clean = self.upa_name.lower().replace("upa ", "").strip()
+
             upa_config = None
             for key, config in all_params.items():
-                if key.lower() in self.upa_name.lower() or self.upa_name.lower() in key.lower():
+                key_clean = key.lower().replace("upa ", "").strip()
+                if key_clean in upa_name_clean or upa_name_clean in key_clean:
                     upa_config = config
+                    print(f"[OK] Match encontrado: '{self.upa_name}' -> '{key}'")
                     break
 
             if not upa_config:
