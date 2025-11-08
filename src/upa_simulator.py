@@ -27,8 +27,6 @@ class UPAConfig:
     name: str
     uuid: str
     enabled: bool
-    flow_mode: str
-    flow_rate: float
     bairros: List[str]
     classificacao_distribution: Dict[str, float]
 
@@ -36,8 +34,9 @@ class UPAConfig:
 class UPASimulator:
     """Simulador principal de fluxo de pacientes UPA"""
 
-    def __init__(self, config_path: str = "config.json"):
+    def __init__(self, config_path: str = "config.json", simulation_params_path: str = "simulation_params.json"):
         self.config = self._load_config(config_path)
+        self.simulation_params = self._load_config(simulation_params_path)
         self.monitoring_client = APIClient(self.config["monitoring_service"]["base_url"])
         self.gateway_client = APIClient(self.config["gateway_service"]["base_url"])
 
@@ -111,8 +110,37 @@ class UPASimulator:
                 f"(hora {rate_info['hour']}h - {rate_info['peak_type']})"
             )
 
+    def _get_classification_distribution(self, upa_name: str) -> Dict[str, float]:
+        """
+        Busca distribuição de classificação do simulation_params.json (dados reais).
+
+        Args:
+            upa_name: Nome da UPA
+
+        Returns:
+            Dicionário com distribuição de classificação
+        """
+        # Tenta encontrar configuração da UPA no simulation_params
+        for key, params in self.simulation_params.items():
+            if key.lower() in upa_name.lower() or upa_name.lower() in key.lower():
+                logging.info(f"Dados carregados: '{upa_name}' -> '{key}'")
+                return params.get('classification_distribution', self._default_classification())
+
+        # Se não encontrar, usa distribuição padrão
+        logging.warning(f"Distribuição de classificação não encontrada para {upa_name}, usando padrão")
+        return self._default_classification()
+
+    def _default_classification(self) -> Dict[str, float]:
+        """Distribuição padrão de classificação (Campina Grande - 4 níveis)"""
+        return {
+            'VERDE': 0.50,
+            'AMARELO': 0.34,
+            'VERMELHO': 0.10,
+            'AZUL': 0.06
+        }
+
     def _fetch_upas(self):
-        """Busca UPAs da API"""
+        """Busca UPAs da API e carrega dados de simulação"""
         logging.info("Buscando UPAs da API...")
 
         endpoint = self.config["gateway_service"]["endpoints"]["upas"]
@@ -138,20 +166,22 @@ class UPASimulator:
             if not upa_config_data.get("enabled", True):
                 continue
 
-            flow_config = upa_config_data["patient_flow"]
-            flow_rate = flow_config["rate"]
+            # Busca distribuição de classificação do simulation_params.json (dados reais)
+            classificacao_dist = self._get_classification_distribution(upa_name)
 
             self.upas[upa_name] = UPAConfig(
                 name=upa_name,
                 uuid=upa_data["id"],
                 enabled=True,
-                flow_mode=flow_config["mode"],
-                flow_rate=flow_rate,
                 bairros=upa_config_data["bairros"],
-                classificacao_distribution=upa_config_data["classificacao_distribution"]
+                classificacao_distribution=classificacao_dist
             )
 
             logging.info(f"UPA configurada: {upa_name} (UUID: {upa_data['id']})")
+            logging.info(f"  Distribuição: VERMELHO={classificacao_dist.get('VERMELHO', 0):.0%}, "
+                        f"AMARELO={classificacao_dist.get('AMARELO', 0):.0%}, "
+                        f"VERDE={classificacao_dist.get('VERDE', 0):.0%}, "
+                        f"AZUL={classificacao_dist.get('AZUL', 0):.0%}")
 
     def start(self):
         """Inicia threads de simulação"""
@@ -242,7 +272,7 @@ class UPASimulator:
                         logging.info(
                             f"[{upa_name}] {rate_info['peak_type']}: "
                             f"{rate_info['current_rate']:.1f} pac/h "
-                            f"(λ={rate_info['current_rate']:.1f}, intervalo médio: {interval:.0f}s)"
+                            f"(taxa={rate_info['current_rate']:.1f}, intervalo medio: {interval:.0f}s)"
                         )
                     last_peak_log = current_hour
 
@@ -513,7 +543,18 @@ class UPASimulator:
 
 def main():
     """Função principal"""
-    simulator = UPASimulator("config/config.json")
+    import os
+
+    # Determina caminhos baseado no ambiente (local vs Docker)
+    if os.path.exists("config/config.json"):
+        config_path = "config/config.json"
+        params_path = "simulation_params.json"
+    else:
+        # Ambiente Docker
+        config_path = "config.json"
+        params_path = "simulation_params.json"
+
+    simulator = UPASimulator(config_path, params_path)
     simulator._setup_logging()
     simulator.initialize()
     simulator.start()

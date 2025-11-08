@@ -16,8 +16,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copiar TODO o diretório src (incluindo módulos)
 COPY src/ ./
 
-# Copiar arquivo de configuração
+# Copiar arquivos de configuração
 COPY config/config.json .
+COPY simulation_params.json .
 
 # Criar diretório para logs
 RUN mkdir -p /app/logs

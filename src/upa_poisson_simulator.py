@@ -17,12 +17,11 @@ import uuid
 
 
 class ClassificacaoManchester(Enum):
-    """Classificação de Manchester"""
-    VERMELHO = (1, 0, "Emergência")           
-    LARANJA = (2, 10, "Muito Urgente")        
-    AMARELO = (3, 60, "Urgente")              
-    VERDE = (4, 120, "Pouco Urgente")         
-    AZUL = (5, 240, "Não Urgente")            
+    """Classificação de Manchester - Campina Grande (4 níveis sem LARANJA)"""
+    VERMELHO = (1, 0, "Emergência - Atendimento imediato")
+    AMARELO = (2, 60, "Muito urgente - Até 60 minutos")
+    VERDE = (3, 120, "Urgente - Até 120 minutos")
+    AZUL = (4, 240, "Pouco urgente - Até 240 minutos")
 
     def __init__(self, prioridade, max_wait_minutes, descricao):
         self.prioridade = prioridade
@@ -362,7 +361,7 @@ class UPAPoissonSimulator:
             if stats.pacientes_por_classificacao:
                 logging.info(f"\nDistribuição de Classificações:")
                 total_class = sum(stats.pacientes_por_classificacao.values())
-                for class_name in ['VERMELHO', 'LARANJA', 'AMARELO', 'VERDE', 'AZUL']:
+                for class_name in ['VERMELHO', 'AMARELO', 'VERDE', 'AZUL']:
                     count = stats.pacientes_por_classificacao.get(class_name, 0)
                     pct = 100 * count / total_class if total_class > 0 else 0
                     logging.info(f"  {class_name}: {count} pacientes ({pct:.1f}%)")

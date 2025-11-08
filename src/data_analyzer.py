@@ -207,28 +207,27 @@ class UPADataAnalyzer:
             return self._default_classification()
 
     def _default_classification(self) -> Dict[str, float]:
-        """Distribuição padrão de classificações"""
+        """Distribuição padrão de classificações (Campina Grande - 4 níveis sem LARANJA)"""
         return {
             'VERDE': 0.50,
-            'AMARELO': 0.30,
-            'LARANJA': 0.15,
-            'VERMELHO': 0.04,
-            'AZUL': 0.01
+            'AMARELO': 0.34,
+            'VERMELHO': 0.10,
+            'AZUL': 0.06
         }
 
     def analyze_service_times(self) -> Dict[str, Tuple[float, float]]:
         """
         Tempos de atendimento baseados no protocolo de Manchester.
+        Campina Grande usa 4 níveis (sem LARANJA).
 
         Returns:
             Dict[classificacao] = (tempo_min, tempo_max) em minutos
         """
         service_times = {
-            'VERMELHO': (5, 15),    # Emergência
-            'LARANJA': (10, 30),    # Muito urgente
-            'AMARELO': (20, 60),    # Urgente
-            'VERDE': (30, 90),      # Pouco urgente
-            'AZUL': (20, 60)        # Não urgente
+            'VERMELHO': (5, 15),    # Emergência - Atendimento imediato
+            'AMARELO': (20, 60),    # Muito urgente - Até 60 minutos
+            'VERDE': (30, 90),      # Urgente - Até 120 minutos
+            'AZUL': (20, 60)        # Pouco urgente - Até 240 minutos
         }
         return service_times
 
@@ -269,7 +268,7 @@ class UPADataAnalyzer:
 
         if classification_dist:
             print(f"\nDistribuicao de classificacoes:")
-            for class_name in ['VERMELHO', 'LARANJA', 'AMARELO', 'VERDE', 'AZUL']:
+            for class_name in ['VERMELHO', 'AMARELO', 'VERDE', 'AZUL']:
                 prob = classification_dist.get(class_name, 0)
                 if prob > 0:
                     print(f"  {class_name}: {prob*100:.1f}%")

@@ -28,20 +28,15 @@
       "23": 3.7688857162199163
     },
     "classification_distribution": {
-      "VERDE": 0.5,
-      "AMARELO": 0.3,
-      "LARANJA": 0.15,
-      "VERMELHO": 0.04,
-      "AZUL": 0.01
+      "VERDE": 0.50,
+      "AMARELO": 0.34,
+      "VERMELHO": 0.10,
+      "AZUL": 0.06
     },
     "service_times_minutes": {
       "VERMELHO": [
         5,
         15
-      ],
-      "LARANJA": [
-        10,
-        30
       ],
       "AMARELO": [
         20,
@@ -64,8 +59,8 @@
       "peak_rate": 20.716391685182323
     }
   },
-  "Dinamerica": {
-    "upa_name": "Dinamerica",
+  "Dinamérica": {
+    "upa_name": "Dinamérica",
     "hourly_arrival_rates": {
       "0": 6.084717562665358,
       "1": 4.528161907099801,
@@ -93,20 +88,15 @@
       "23": 8.101164661920738
     },
     "classification_distribution": {
-      "VERDE": 0.5,
-      "AMARELO": 0.3,
-      "LARANJA": 0.15,
-      "VERMELHO": 0.04,
-      "AZUL": 0.01
+      "VERDE": 0.50,
+      "AMARELO": 0.34,
+      "VERMELHO": 0.10,
+      "AZUL": 0.06
     },
     "service_times_minutes": {
       "VERMELHO": [
         5,
         15
-      ],
-      "LARANJA": [
-        10,
-        30
       ],
       "AMARELO": [
         20,
