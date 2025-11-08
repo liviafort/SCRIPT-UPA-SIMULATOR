@@ -1,8 +1,18 @@
 # UPA Simulator - Dependências Python
 # Python 3.8+
 
+# HTTP requests
 requests>=2.31.0
-
 urllib3>=2.0.0
 
+# Type hints
 typing-extensions>=4.8.0
+
+# Numpy para Processo de Poisson
+numpy>=1.24.0
+
+# Pandas para análise de dados (data_analyzer.py)
+pandas>=2.0.0
+
+# SimPy para simulação discreta (upa_poisson_simulator.py)
+simpy>=4.0.0
