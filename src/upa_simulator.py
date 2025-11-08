@@ -415,7 +415,10 @@ class UPASimulator:
         Loop de processamento de atendimento - PRIORIZADO
         COM variabilidade (pausas, trocas, casos complexos)
         """
-        atendimento_config = self.config["simulation"]["atendimento_time_seconds"]
+        # Busca configuração específica da UPA ou usa padrão global
+        upa_config = self.config["upas"].get(upa_name, {})
+        atendimento_config = upa_config.get("atendimento_time_seconds",
+                                            self.config["simulation"]["atendimento_time_seconds"])
         real_time_factor = self.config["simulation"]["real_time_factor"]
 
         while self.running:
