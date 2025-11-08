@@ -251,18 +251,13 @@ class UPASimulator:
         """
         upa_config = self.upas[upa_name]
         poisson_gen = self.poisson_generators[upa_name]
-        min_interval = self.config["simulation"].get("min_entry_interval_seconds", 0)
 
         last_peak_log = None
 
         while self.running:
             try:
-                # Gera intervalo usando processo Poisson
+                # Gera intervalo usando processo Poisson (distribuição exponencial)
                 interval = poisson_gen.get_next_interval_seconds()
-
-                # Aplica intervalo mínimo se configurado
-                if min_interval > 0:
-                    interval = max(interval, min_interval)
 
                 rate_info = poisson_gen.get_rate_info()
 
