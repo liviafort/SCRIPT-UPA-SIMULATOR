@@ -48,5 +48,6 @@ USER node
 HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
   CMD node -e "console.log('ok')" || exit 1
 
-# Executar o simulador
+# Executar o simulador com TZ configurado
+ENV TZ=America/Sao_Paulo
 CMD ["node", "dist/index.js"]
