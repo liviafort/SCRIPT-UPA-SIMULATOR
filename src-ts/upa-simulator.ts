@@ -180,6 +180,26 @@ export class UPASimulator {
   }
 
   /**
+   * Obtém timestamp no timezone de São Paulo
+   */
+  private getBrazilTimestamp(): string {
+    const now = new Date();
+    // Converte para o timezone de São Paulo (UTC-3)
+    const brazilDate = new Date(now.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
+
+    // Formata manualmente no padrão ISO com offset
+    const year = brazilDate.getFullYear();
+    const month = String(brazilDate.getMonth() + 1).padStart(2, '0');
+    const day = String(brazilDate.getDate()).padStart(2, '0');
+    const hours = String(brazilDate.getHours()).padStart(2, '0');
+    const minutes = String(brazilDate.getMinutes()).padStart(2, '0');
+    const seconds = String(brazilDate.getSeconds()).padStart(2, '0');
+    const ms = String(brazilDate.getMilliseconds()).padStart(3, '0');
+
+    return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}.${ms}-03:00`;
+  }
+
+  /**
    * Cria um novo paciente
    */
   private createPatient(upaConfig: UPAConfig): Patient {
@@ -192,7 +212,7 @@ export class UPASimulator {
       upaName: upaConfig.name,
       bairro,
       classificacao,
-      entradaTimestamp: new Date().toISOString()
+      entradaTimestamp: this.getBrazilTimestamp()
     };
   }
 
@@ -209,7 +229,7 @@ export class UPASimulator {
       await this.sleep(this.MIN_WAIT_BEFORE_TRIAGEM_SECONDS * 1000);
 
       // 2. TRIAGEM (registra APÓS a espera, quando realmente acontece)
-      patient.triagemTimestamp = new Date().toISOString();
+      patient.triagemTimestamp = this.getBrazilTimestamp();
       await this.registerTriagem(patient);
       console.log(`[${patient.upaName}] Triagem: ${patient.patientId.substring(0, 8)} -> ${patient.classificacao}`);
 
@@ -217,7 +237,7 @@ export class UPASimulator {
       await this.sleep(this.TRIAGEM_TIME_SECONDS * 1000);
 
       // 3. ATENDIMENTO (registra APÓS triagem completa, quando realmente acontece)
-      patient.atendimentoTimestamp = new Date().toISOString();
+      patient.atendimentoTimestamp = this.getBrazilTimestamp();
       await this.registerAtendimento(patient);
       console.log(`[${patient.upaName}] Atendimento: ${patient.patientId.substring(0, 8)} [${patient.classificacao}]`);
 
