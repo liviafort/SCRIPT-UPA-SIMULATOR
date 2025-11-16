@@ -54,15 +54,37 @@ export class UPASimulator {
 
     // Configura geradores Poisson para cada UPA
     for (const [upaName, upaConfig] of this.upas) {
-      const paramKey = upaName.includes('Dinamerica') ? 'Dinamerica' : 'Alto_Branco';
+      // Determina qual chave usar baseado no nome da UPA
+      let paramKey: 'Dinamerica' | 'Alto_Branco';
+
+      // Remove acentos e normaliza para comparação
+      const normalizedName = upaName
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '');
+
+      if (normalizedName.includes('dinamerica') || normalizedName.includes('dinamérica')) {
+        paramKey = 'Dinamerica';
+      } else if (normalizedName.includes('alto') && normalizedName.includes('branco')) {
+        paramKey = 'Alto_Branco';
+      } else {
+        console.warn(`[AVISO] UPA "${upaName}" não reconhecida. Usando Alto_Branco como padrão.`);
+        paramKey = 'Alto_Branco';
+      }
+
       const params = this.simulationParams[paramKey];
 
       if (params) {
+        console.log(`\n[DEBUG] Configurando ${upaName}:`);
+        console.log(`  -> Mapeado para: ${paramKey}`);
+        console.log(`  -> Lambda médio: ${params.lambda_hora_media.toFixed(2)} pac/h`);
+        console.log(`  -> Total horas no array: ${params.lambda_por_hora.length}`);
+
         const generator = new PoissonGenerator(params.lambda_por_hora);
         this.poissonGenerators.set(upaName, generator);
 
         const rateInfo = generator.getRateInfo();
-        console.log(`${upaName}: λ = ${rateInfo.lambda.toFixed(1)} pac/h (hora ${rateInfo.hour}h)`);
+        console.log(`  -> Lambda atual (hora ${rateInfo.hour}h): ${rateInfo.lambda.toFixed(2)} pac/h`);
       }
     }
 
