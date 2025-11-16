@@ -1,6 +1,6 @@
 {
   "monitoring_service": {
-    "base_url": "http://localhost:8086",
+    "base_url": "https://your-api.com/monitoring",
     "endpoints": {
       "entrada": "/api/v1/events/entrada",
       "triagem": "/api/v1/events/triagem",
@@ -8,7 +8,7 @@
     }
   },
   "gateway_service": {
-    "base_url": "http://localhost:8084",
+    "base_url": "https://your-api.com/gateway",
     "endpoints": {
       "upas": "/api/v1/upas"
     }
@@ -16,96 +16,82 @@
   "upas": {
     "UPA Dinamérica": {
       "enabled": true,
-      "patient_flow": {
-        "mode": "per_hour",
-        "rate": 40
-      },
       "bairros": [
-        "Dinamérica",
-        "Malvinas",
-        "Jardim Paulistano",
+        "Alto Branco",
+        "Conceição",
+        "Jardim Tavares",
+        "Jeremias",
+        "Lauritzen",
+        "Castelo Branco",
         "José Pinheiro",
-        "Centenário"
-      ],
-      "classificacao_distribution": {
-        "VERMELHO": 0.05,
-        "AMARELO": 0.25,
-        "VERDE": 0.50,
-        "AZUL": 0.20
-      }
+        "Mirante",
+        "Cruzeiro",
+        "Estação Velha",
+        "Jardim Quarenta",
+        "Jardim Paulistano",
+        "Liberdade",
+        "São José",
+        "Sandra Cavalcante",
+        "Tambor",
+        "Bodocongó",
+        "Malvinas",
+        "Centenário",
+        "Dinamérica",
+        "Bela Vista",
+        "Serrotão",
+        "Santa Rosa",
+        "Santa Cruz",
+        "Quarenta",
+        "Universitário",
+        "Pedregal",
+        "Prata",
+        "Monte Santo"
+      ]
     },
     "UPA Alto Branco": {
       "enabled": true,
-      "patient_flow": {
-        "mode": "per_hour",
-        "rate": 30
-      },
       "bairros": [
         "Alto Branco",
-        "Prata",
+        "Conceição",
+        "Jardim Tavares",
+        "Jeremias",
         "Lauritzen",
+        "Castelo Branco",
+        "José Pinheiro",
+        "Mirante",
+        "Cruzeiro",
+        "Estação Velha",
+        "Jardim Quarenta",
+        "Jardim Paulistano",
+        "Liberdade",
+        "São José",
+        "Sandra Cavalcante",
+        "Tambor",
+        "Bodocongó",
+        "Malvinas",
+        "Centenário",
+        "Dinamérica",
         "Bela Vista",
-        "Sandra Cavalcante"
-      ],
-      "classificacao_distribution": {
-        "VERMELHO": 0.08,
-        "AMARELO": 0.30,
-        "VERDE": 0.45,
-        "AZUL": 0.17
-      }
+        "Serrotão",
+        "Santa Rosa",
+        "Santa Cruz",
+        "Quarenta",
+        "Universitário",
+        "Pedregal",
+        "Prata",
+        "Monte Santo"
+      ]
     }
   },
   "simulation": {
-    "real_time_factor": 1.0,
-    "triagem_time_seconds": {
-      "min": 60,
-      "max": 240
-    },
-    "atendimento_time_seconds": {
-      "VERMELHO": {"min": 900, "max": 2400},
-      "AMARELO": {"min": 600, "max": 1800},
-      "VERDE": {"min": 300, "max": 900},
-      "AZUL": {"min": 180, "max": 600}
-    },
-    "max_wait_before_triagem_seconds": 720,
-    "logging": {
-      "level": "INFO",
-      "file": "upa_simulator.log",
-      "max_bytes": 5242880,
-      "backup_count": 2
+    "triagem_time_minutes": 2,
+    "atendimento_time_minutes": 5,
+    "min_wait_before_triagem_minutes": 1,
+    "classification_distribution": {
+      "VERDE": 0.50,
+      "AMARELO": 0.34,
+      "VERMELHO": 0.10,
+      "AZUL": 0.06
     }
-  },
-  "manchester_protocol": {
-    "VERMELHO": {
-      "max_wait_minutes": 0,
-      "priority": 1,
-      "description": "Emergência - Atendimento imediato"
-    },
-    "AMARELO": {
-      "max_wait_minutes": 60,
-      "priority": 2,
-      "description": "Muito urgente - Atendimento em até 60 minutos"
-    },
-    "VERDE": {
-      "max_wait_minutes": 120,
-      "priority": 3,
-      "description": "Urgente - Atendimento em até 120 minutos"
-    },
-    "AZUL": {
-      "max_wait_minutes": 240,
-      "priority": 4,
-      "description": "Pouco urgente - Atendimento em até 240 minutos"
-    }
-  },
-  "comments": {
-    "urls": "Configure as URLs dos seus serviços aqui (gateway e monitoring)",
-    "patient_flow_modes": [
-      "per_minute: taxa de pacientes por minuto",
-      "per_hour: taxa de pacientes por hora",
-      "per_day: taxa de pacientes por dia"
-    ],
-    "real_time_factor": "1.0 = tempo real, 2.0 = 2x mais rápido, 0.5 = 2x mais lento",
-    "classificacao_distribution": "Distribuição de probabilidade das classificações (deve somar 1.0)",
-    "tempos_realistas": "Baseado em estudo SciELO (Manchester): triagem 1-4min (mediana 2min), atendimento varia por classificação"
   }
 }

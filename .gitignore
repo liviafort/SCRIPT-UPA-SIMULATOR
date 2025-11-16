@@ -6,7 +6,6 @@ __pycache__/
 .Python
 build/
 develop-eggs/
-dist/
 downloads/
 eggs/
 .eggs/
@@ -68,3 +67,8 @@ dmypy.json
 data/
 output/
 reports/
+
+# TypeScript / Node
+node_modules/
+dist/
+*.tsbuildinfo

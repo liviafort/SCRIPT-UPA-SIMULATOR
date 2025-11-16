@@ -1,36 +1,53 @@
+version: '3.8'
+
 services:
   upa-simulator:
     build:
       context: ..
       dockerfile: docker/Dockerfile
-    container_name: upa-simulator
+    image: upa-simulator:typescript
+    container_name: upa-simulator-ts
     restart: unless-stopped
 
     logging:
       driver: "json-file"
       options:
-        max-size: "10m"        
-        max-file: "3"          
-        compress: "true"       
+        max-size: "10m"
+        max-file: "3"
+        compress: "true"
 
     volumes:
       - ../logs:/app/logs
+      # Mount config para poder alterar sem rebuild (opcional)
+      - ../config/config.json:/app/config/config.json:ro
+      - ../analise-dados/parametros_simulacao_upas.json:/app/analise-dados/parametros_simulacao_upas.json:ro
 
     environment:
-      - PYTHONUNBUFFERED=1 
+      - NODE_ENV=production
+      - TZ=America/Sao_Paulo
 
     deploy:
       resources:
         limits:
-          cpus: '1.0'          
-          memory: 512M         
+          cpus: '1.0'
+          memory: 512M
         reservations:
-          cpus: '0.5'          
-          memory: 256M         
+          cpus: '0.5'
+          memory: 256M
 
+    # Healthcheck já está no Dockerfile
+    # mas pode ser sobrescrito aqui se necessário
     healthcheck:
-      test: ["CMD", "pgrep", "-f", "python"]
+      test: ["CMD", "node", "-e", "console.log('ok')"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 10s
+
+    # Network (se precisar comunicar com outros containers)
+    # networks:
+    #   - upa-network
+
+# networks:
+#   upa-network:
+#     driver: bridge

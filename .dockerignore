@@ -1,6 +1,8 @@
+# Git
 .git
 .gitignore
 
+# Python (legado)
 __pycache__
 *.py[cod]
 *$py.class
@@ -9,24 +11,54 @@ __pycache__
 venv/
 env/
 ENV/
+src/
 
+# Node / TypeScript
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+dist/
+*.tsbuildinfo
+
+# Logs
 *.log
 logs/
 
+# Docker
 docker/
 Dockerfile
 docker-compose.yml
+.dockerignore
 
+# IDE
 .vscode/
 .idea/
 *.swp
 *.swo
 
+# Docs
 README.md
 docs/
 
+# Config examples (config real será copiado explicitamente)
 config.examples.json
 config.realistic.json
 
+# Dados CSV (não necessários no container)
+dados-*/
+
+# OS
 .DS_Store
 Thumbs.db
+
+# Tests
+*.test.ts
+*.spec.ts
+test/
+tests/
+
+# Misc
+.env
+*.tmp
+*.bak
