@@ -40,10 +40,23 @@ export class APIClient {
   private async ensureAuthenticated(): Promise<void> {
     if (!this.authConfig) return;
 
-    // Se não tem token ou token está expirando em menos de 1 minuto, faz login
     const now = Date.now();
-    if (!this.token || !this.tokenExpiration || this.tokenExpiration - now < 60000) {
+
+    // Se não tem token, faz login inicial
+    if (!this.token || !this.tokenExpiration) {
       await this.login();
+      return;
+    }
+
+    // Se o token está expirando em menos de 5 minutos, tenta refresh
+    if (this.tokenExpiration - now < 300000) { // 5 minutos
+      try {
+        await this.refreshToken();
+      } catch (error) {
+        // Se refresh falhar, faz login novamente
+        console.warn('[AUTH] Refresh token falhou, fazendo login novamente');
+        await this.login();
+      }
     }
   }
 
@@ -65,10 +78,44 @@ export class APIClient {
         // Define expiração (ou usa 24h como padrão se não vier no response)
         const expiresInMs = (response.data.data.expiresIn || 86400) * 1000;
         this.tokenExpiration = Date.now() + expiresInMs;
-        console.log('[AUTH] Login realizado com sucesso');
+
+        const expiresInHours = Math.floor(expiresInMs / 3600000);
+        console.log(`[AUTH] Login realizado com sucesso (expira em ${expiresInHours}h)`);
       }
     } catch (error) {
       console.error('[AUTH ERROR] Falha ao fazer login:', error instanceof Error ? error.message : error);
+      throw error;
+    }
+  }
+
+  /**
+   * Renova o token JWT usando refresh token
+   */
+  private async refreshToken(): Promise<void> {
+    if (!this.authConfig || !this.token) return;
+
+    try {
+      const refreshUrl = `${this.authConfig.base_url}${this.authConfig.endpoints.refresh}`;
+      const response = await axios.post<{ data: AuthResponse }>(
+        refreshUrl,
+        {},
+        {
+          headers: {
+            'Authorization': `Bearer ${this.token}`
+          }
+        }
+      );
+
+      if (response.data?.data?.token) {
+        this.token = response.data.data.token;
+        const expiresInMs = (response.data.data.expiresIn || 86400) * 1000;
+        this.tokenExpiration = Date.now() + expiresInMs;
+
+        const expiresInHours = Math.floor(expiresInMs / 3600000);
+        console.log(`[AUTH] Token renovado com sucesso (expira em ${expiresInHours}h)`);
+      }
+    } catch (error) {
+      console.error('[AUTH ERROR] Falha ao renovar token:', error instanceof Error ? error.message : error);
       throw error;
     }
   }
