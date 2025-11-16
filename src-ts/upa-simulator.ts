@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto';
 import { PoissonGenerator } from './poisson-generator';
 import { APIClient } from './api-client';
+import { PriorityQueue } from './priority-queue';
 import {
   ClassificacaoManchester,
   Patient,
@@ -22,6 +23,7 @@ export class UPASimulator {
   private gatewayClient: APIClient;
   private upas: Map<string, UPAConfig> = new Map();
   private poissonGenerators: Map<string, PoissonGenerator> = new Map();
+  private atendimentoQueues: Map<string, PriorityQueue> = new Map();
   private running: boolean = false;
 
   // Configurações carregadas do config.json
@@ -52,7 +54,7 @@ export class UPASimulator {
 
     await this.fetchUPAs();
 
-    // Configura geradores Poisson para cada UPA
+    // Configura geradores Poisson e filas de prioridade para cada UPA
     for (const [upaName, upaConfig] of this.upas) {
       // Determina qual chave usar baseado no nome da UPA
       let paramKey: 'Dinamerica' | 'Alto_Branco';
@@ -82,6 +84,9 @@ export class UPASimulator {
 
         const generator = new PoissonGenerator(params.lambda_por_hora);
         this.poissonGenerators.set(upaName, generator);
+
+        // Cria fila de prioridade para atendimentos
+        this.atendimentoQueues.set(upaName, new PriorityQueue());
 
         const rateInfo = generator.getRateInfo();
         console.log(`  -> Lambda atual (hora ${rateInfo.hour}h): ${rateInfo.lambda.toFixed(2)} pac/h`);
@@ -135,9 +140,10 @@ export class UPASimulator {
     this.running = true;
     console.log('Simulação iniciada! (Ctrl+C para parar)\n');
 
-    // Inicia loop para cada UPA
+    // Inicia loop de chegadas e processador de atendimentos para cada UPA
     for (const [upaName, upaConfig] of this.upas) {
       this.runUPALoop(upaName, upaConfig);
+      this.runAtendimentoProcessor(upaName);
     }
   }
 
@@ -217,7 +223,7 @@ export class UPASimulator {
   }
 
   /**
-   * Processa um paciente completo: entrada -> triagem -> atendimento
+   * Processa entrada e triagem do paciente, depois adiciona à fila de atendimento
    */
   private async processPatient(patient: Patient): Promise<void> {
     try {
@@ -236,17 +242,55 @@ export class UPASimulator {
       // Tempo de triagem
       await this.sleep(this.TRIAGEM_TIME_SECONDS * 1000);
 
-      // 3. ATENDIMENTO (registra APÓS triagem completa, quando realmente acontece)
-      patient.atendimentoTimestamp = this.getBrazilTimestamp();
-      await this.registerAtendimento(patient);
-      console.log(`[${patient.upaName}] Atendimento: ${patient.patientId.substring(0, 8)} [${patient.classificacao}]`);
-
-      // Tempo de atendimento
-      await this.sleep(this.ATENDIMENTO_TIME_SECONDS * 1000);
-
-      console.log(`[${patient.upaName}] Finalizado: ${patient.patientId.substring(0, 8)}\n`);
+      // 3. ADICIONA À FILA DE ATENDIMENTO (respeitando prioridade)
+      const queue = this.atendimentoQueues.get(patient.upaName);
+      if (queue) {
+        queue.enqueue(patient);
+        const stats = queue.getStats();
+        console.log(`[${patient.upaName}] ${patient.patientId.substring(0, 8)} entrou na fila de atendimento [${patient.classificacao}] - Fila: V:${stats.VERMELHO} A:${stats.AMARELO} VE:${stats.VERDE} AZ:${stats.AZUL}`);
+      }
     } catch (error) {
       console.error(`[${patient.upaName}] Erro processando paciente ${patient.patientId.substring(0, 8)}:`, error);
+    }
+  }
+
+  /**
+   * Processador contínuo da fila de atendimento (respeita prioridade)
+   */
+  private async runAtendimentoProcessor(upaName: string): Promise<void> {
+    const queue = this.atendimentoQueues.get(upaName);
+
+    if (!queue) {
+      console.error(`Fila de atendimento não encontrada para ${upaName}`);
+      return;
+    }
+
+    while (this.running) {
+      try {
+        // Verifica se há pacientes na fila
+        if (!queue.isEmpty()) {
+          // Remove paciente com maior prioridade
+          const patient = queue.dequeue();
+
+          if (patient) {
+            // Registra atendimento
+            patient.atendimentoTimestamp = this.getBrazilTimestamp();
+            await this.registerAtendimento(patient);
+            console.log(`[${patient.upaName}] Atendimento: ${patient.patientId.substring(0, 8)} [${patient.classificacao}]`);
+
+            // Tempo de atendimento
+            await this.sleep(this.ATENDIMENTO_TIME_SECONDS * 1000);
+
+            console.log(`[${patient.upaName}] Finalizado: ${patient.patientId.substring(0, 8)}\n`);
+          }
+        } else {
+          // Fila vazia, aguarda um pouco antes de verificar novamente
+          await this.sleep(1000);
+        }
+      } catch (error) {
+        console.error(`[${upaName}] Erro no processador de atendimentos:`, error);
+        await this.sleep(5000);
+      }
     }
   }
 
