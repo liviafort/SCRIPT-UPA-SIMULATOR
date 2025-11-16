@@ -33,7 +33,23 @@ export interface UPAParams {
   tempo_entre_chegadas_minutos: number;
 }
 
+export interface AuthConfig {
+  username: string;
+  password: string;
+  base_url: string;
+  endpoints: {
+    login: string;
+    refresh: string;
+  };
+}
+
+export interface AuthResponse {
+  token: string;
+  expiresIn: number;
+}
+
 export interface Config {
+  auth: AuthConfig;
   monitoring_service: {
     base_url: string;
     endpoints: {

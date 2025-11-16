@@ -33,7 +33,7 @@ export class UPASimulator {
   constructor(config: Config, simulationParams: SimulationParams) {
     this.config = config;
     this.simulationParams = simulationParams;
-    this.monitoringClient = new APIClient(config.monitoring_service.base_url);
+    this.monitoringClient = new APIClient(config.monitoring_service.base_url, config.auth);
     this.gatewayClient = new APIClient(config.gateway_service.base_url);
 
     // Carrega configurações da simulação
@@ -180,23 +180,23 @@ export class UPASimulator {
   }
 
   /**
-   * Obtém timestamp no timezone de São Paulo
+   * Obtém timestamp no timezone de São Paulo no formato esperado pela API
+   * Formato: 2025-10-29T10:00:00 (sem millisegundos, sem timezone)
    */
   private getBrazilTimestamp(): string {
     const now = new Date();
     // Converte para o timezone de São Paulo (UTC-3)
     const brazilDate = new Date(now.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
 
-    // Formata manualmente no padrão ISO com offset
+    // Formata no padrão esperado pela API
     const year = brazilDate.getFullYear();
     const month = String(brazilDate.getMonth() + 1).padStart(2, '0');
     const day = String(brazilDate.getDate()).padStart(2, '0');
     const hours = String(brazilDate.getHours()).padStart(2, '0');
     const minutes = String(brazilDate.getMinutes()).padStart(2, '0');
     const seconds = String(brazilDate.getSeconds()).padStart(2, '0');
-    const ms = String(brazilDate.getMilliseconds()).padStart(3, '0');
 
-    return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}.${ms}-03:00`;
+    return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}`;
   }
 
   /**
