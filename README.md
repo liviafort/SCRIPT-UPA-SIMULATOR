@@ -170,9 +170,9 @@ Configure os seguintes parâmetros em `config/config.json`:
 ```json
 {
   "simulation": {
-    "triagem_time_minutes": 2,
+    "triagem_time_minutes": 3,
     "atendimento_time_minutes": 5,
-    "min_wait_before_triagem_minutes": 1,
+    "min_wait_before_triagem_minutes": 2,
     "classification_distribution": {
       "VERDE": 0.50,
       "AMARELO": 0.34,
