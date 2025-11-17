@@ -87,6 +87,7 @@ export interface Config {
     triagem_time_minutes: number;
     atendimento_time_minutes: number;
     min_wait_before_triagem_minutes: number;
+    numero_medicos: number;
     classification_distribution: Record<ClassificacaoManchester, number>;
   };
 }

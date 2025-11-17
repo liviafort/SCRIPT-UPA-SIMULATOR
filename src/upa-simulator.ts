@@ -24,6 +24,7 @@ export class UPASimulator {
   private readonly TRIAGEM_TIME_SECONDS: number;
   private readonly ATENDIMENTO_TIME_SECONDS: number;
   private readonly MIN_WAIT_BEFORE_TRIAGEM_SECONDS: number;
+  private readonly NUMERO_MEDICOS: number;
 
   constructor(config: Config, simulationParams: SimulationParams) {
     this.config = config;
@@ -35,6 +36,7 @@ export class UPASimulator {
     this.TRIAGEM_TIME_SECONDS = config.simulation.triagem_time_minutes * 60;
     this.ATENDIMENTO_TIME_SECONDS = config.simulation.atendimento_time_minutes * 60;
     this.MIN_WAIT_BEFORE_TRIAGEM_SECONDS = config.simulation.min_wait_before_triagem_minutes * 60;
+    this.NUMERO_MEDICOS = config.simulation.numero_medicos;
   }
 
   async initialize(): Promise<void> {
@@ -80,6 +82,7 @@ export class UPASimulator {
     }
 
     console.log(`\nSimulador inicializado com ${this.upas.size} UPA(s)`);
+    console.log(`Número de médicos por UPA: ${this.NUMERO_MEDICOS}`);
     console.log(`Tempo espera mínima: ${this.MIN_WAIT_BEFORE_TRIAGEM_SECONDS / 60} min`);
     console.log(`Tempo triagem: ${this.TRIAGEM_TIME_SECONDS / 60} min`);
     console.log(`Tempo atendimento: ${this.ATENDIMENTO_TIME_SECONDS / 60} min`);
@@ -121,7 +124,10 @@ export class UPASimulator {
 
     for (const [upaName, upaConfig] of this.upas) {
       this.runUPALoop(upaName, upaConfig);
-      this.runAtendimentoProcessor(upaName);
+
+      for (let i = 0; i < this.NUMERO_MEDICOS; i++) {
+        this.runAtendimentoProcessor(upaName, i + 1);
+      }
     }
   }
 
@@ -206,7 +212,7 @@ export class UPASimulator {
     }
   }
 
-  private async runAtendimentoProcessor(upaName: string): Promise<void> {
+  private async runAtendimentoProcessor(upaName: string, medicoId: number): Promise<void> {
     const queue = this.atendimentoQueues.get(upaName);
 
     if (!queue) {
@@ -222,17 +228,17 @@ export class UPASimulator {
           if (patient) {
             patient.atendimentoTimestamp = this.getBrazilTimestamp();
             await this.registerAtendimento(patient);
-            console.log(`[${patient.upaName}] Atendimento: ${patient.patientId.substring(0, 8)} [${patient.classificacao}]`);
+            console.log(`[${patient.upaName}] Médico ${medicoId} - Atendimento: ${patient.patientId.substring(0, 8)} [${patient.classificacao}]`);
 
             await this.sleep(this.ATENDIMENTO_TIME_SECONDS * 1000);
 
-            console.log(`[${patient.upaName}] Finalizado: ${patient.patientId.substring(0, 8)}\n`);
+            console.log(`[${patient.upaName}] Médico ${medicoId} - Finalizado: ${patient.patientId.substring(0, 8)}\n`);
           }
         } else {
           await this.sleep(1000);
         }
       } catch (error) {
-        console.error(`[${upaName}] Erro no processador de atendimentos:`, error);
+        console.error(`[${upaName}] Médico ${medicoId} - Erro no processador de atendimentos:`, error);
         await this.sleep(5000);
       }
     }
