@@ -84,13 +84,14 @@
     }
   },
   "simulation": {
-    "triagem_time_minutes": 2,
+    "triagem_time_minutes": 3,
     "atendimento_time_minutes": 5,
-    "min_wait_before_triagem_minutes": 1,
+    "min_wait_before_triagem_minutes": 2,
     "classification_distribution": {
-      "VERDE": 0.50,
-      "AMARELO": 0.34,
       "VERMELHO": 0.10,
+      "LARANJA": 0.10,
+      "AMARELO": 0.24,
+      "VERDE": 0.50,
       "AZUL": 0.06
     }
   }

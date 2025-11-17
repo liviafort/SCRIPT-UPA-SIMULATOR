@@ -64,7 +64,7 @@ Implementa o gerador de chegadas usando processo de Poisson:
 
 #### `priority-queue.ts`
 Fila de prioridade para pacientes seguindo Protocolo de Manchester:
-- Ordem: VERMELHO > AMARELO > VERDE > AZUL
+- Ordem: VERMELHO > LARANJA > AMARELO > VERDE > AZUL
 - Desempate por FIFO (First In, First Out) dentro da mesma prioridade
 - Estatísticas em tempo real da fila
 
@@ -97,9 +97,10 @@ Ponto de entrada que carrega configurações e inicia o simulador
 O simulador atribui classificações de risco seguindo distribuições configuráveis:
 
 - **VERMELHO**: Emergência (padrão: 10%)
-- **AMARELO**: Muito urgente (padrão: 34%)
-- **VERDE**: Urgente (padrão: 50%)
-- **AZUL**: Pouco urgente (padrão: 6%)
+- **LARANJA**: Muito urgente (padrão: 10%)
+- **AMARELO**: Urgente (padrão: 24%)
+- **VERDE**: Pouco urgente (padrão: 50%)
+- **AZUL**: Não urgente (padrão: 6%)
 
 Pacientes são atendidos respeitando esta ordem de prioridade, com desempate por ordem de chegada.
 
@@ -174,9 +175,10 @@ Configure os seguintes parâmetros em `config/config.json`:
     "atendimento_time_minutes": 5,
     "min_wait_before_triagem_minutes": 2,
     "classification_distribution": {
-      "VERDE": 0.50,
-      "AMARELO": 0.34,
       "VERMELHO": 0.10,
+      "LARANJA": 0.10,
+      "AMARELO": 0.24,
+      "VERDE": 0.50,
       "AZUL": 0.06
     }
   }

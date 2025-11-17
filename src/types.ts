@@ -1,4 +1,4 @@
-export type ClassificacaoManchester = 'VERMELHO' | 'AMARELO' | 'VERDE' | 'AZUL';
+export type ClassificacaoManchester = 'VERMELHO' | 'LARANJA' | 'AMARELO' | 'VERDE' | 'AZUL';
 
 export interface Patient {
   patientId: string;

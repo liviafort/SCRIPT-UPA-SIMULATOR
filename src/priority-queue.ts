@@ -4,9 +4,10 @@ export class PriorityQueue {
   private queue: Patient[] = [];
   private readonly priorityOrder: Record<ClassificacaoManchester, number> = {
     'VERMELHO': 1,
-    'AMARELO': 2,
-    'VERDE': 3,
-    'AZUL': 4
+    'LARANJA': 2,
+    'AMARELO': 3,
+    'VERDE': 4,
+    'AZUL': 5
   };
 
   enqueue(patient: Patient): void {
@@ -46,6 +47,7 @@ export class PriorityQueue {
   getStats(): Record<ClassificacaoManchester, number> {
     const stats: Record<ClassificacaoManchester, number> = {
       'VERMELHO': 0,
+      'LARANJA': 0,
       'AMARELO': 0,
       'VERDE': 0,
       'AZUL': 0

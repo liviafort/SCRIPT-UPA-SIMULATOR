@@ -85,7 +85,7 @@ export class UPASimulator {
     console.log(`Tempo atendimento: ${this.ATENDIMENTO_TIME_SECONDS / 60} min`);
 
     const dist = this.CLASSIFICATION_DISTRIBUTION;
-    console.log(`Distribuição Manchester: VERDE=${(dist.VERDE * 100).toFixed(0)}%, AMARELO=${(dist.AMARELO * 100).toFixed(0)}%, VERMELHO=${(dist.VERMELHO * 100).toFixed(0)}%, AZUL=${(dist.AZUL * 100).toFixed(0)}%\n`);
+    console.log(`Distribuição Manchester: VERMELHO=${(dist.VERMELHO * 100).toFixed(0)}%, LARANJA=${(dist.LARANJA * 100).toFixed(0)}%, AMARELO=${(dist.AMARELO * 100).toFixed(0)}%, VERDE=${(dist.VERDE * 100).toFixed(0)}%, AZUL=${(dist.AZUL * 100).toFixed(0)}%\n`);
   }
 
   private async fetchUPAs(): Promise<void> {
@@ -199,7 +199,7 @@ export class UPASimulator {
       if (queue) {
         queue.enqueue(patient);
         const stats = queue.getStats();
-        console.log(`[${patient.upaName}] ${patient.patientId.substring(0, 8)} entrou na fila de atendimento [${patient.classificacao}] - Fila: V:${stats.VERMELHO} A:${stats.AMARELO} VE:${stats.VERDE} AZ:${stats.AZUL}`);
+        console.log(`[${patient.upaName}] ${patient.patientId.substring(0, 8)} entrou na fila de atendimento [${patient.classificacao}] - Fila: V:${stats.VERMELHO} L:${stats.LARANJA} A:${stats.AMARELO} VE:${stats.VERDE} AZ:${stats.AZUL}`);
       }
     } catch (error) {
       console.error(`[${patient.upaName}] Erro processando paciente ${patient.patientId.substring(0, 8)}:`, error);
