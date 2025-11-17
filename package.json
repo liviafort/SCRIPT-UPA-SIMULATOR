@@ -6,7 +6,7 @@
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
-    "dev": "ts-node src-ts/index.ts",
+    "dev": "ts-node src/index.ts",
     "watch": "tsc --watch"
   },
   "keywords": ["upa", "simulation", "poisson", "manchester"],
