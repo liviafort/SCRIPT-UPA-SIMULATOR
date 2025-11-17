@@ -10,12 +10,6 @@ import {
   SimulationParams
 } from './types';
 
-/**
- * Simulador simplificado de UPA
- * - Chegadas seguem processo de Poisson (baseado em dados reais)
- * - Atendimento fixo de 2 minutos
- * - Protocolo de Manchester
- */
 export class UPASimulator {
   private config: Config;
   private simulationParams: SimulationParams;
@@ -26,7 +20,6 @@ export class UPASimulator {
   private atendimentoQueues: Map<string, PriorityQueue> = new Map();
   private running: boolean = false;
 
-  // Configurações carregadas do config.json
   private readonly CLASSIFICATION_DISTRIBUTION: Record<ClassificacaoManchester, number>;
   private readonly TRIAGEM_TIME_SECONDS: number;
   private readonly ATENDIMENTO_TIME_SECONDS: number;
@@ -45,21 +38,15 @@ export class UPASimulator {
     this.MIN_WAIT_BEFORE_TRIAGEM_SECONDS = config.simulation.min_wait_before_triagem_minutes * 60;
   }
 
-  /**
-   * Inicializa o simulador: busca UPAs da API e configura geradores Poisson
-   */
   async initialize(): Promise<void> {
     console.log('Iniciando UPA Simulator - Versão Simplificada');
     console.log('Protocolo de Manchester | Processo de Poisson\n');
 
     await this.fetchUPAs();
 
-    // Configura geradores Poisson e filas de prioridade para cada UPA
     for (const [upaName, upaConfig] of this.upas) {
-      // Determina qual chave usar baseado no nome da UPA
       let paramKey: 'Dinamerica' | 'Alto_Branco';
 
-      // Remove acentos e normaliza para comparação
       const normalizedName = upaName
         .toLowerCase()
         .normalize('NFD')
@@ -85,7 +72,6 @@ export class UPASimulator {
         const generator = new PoissonGenerator(params.lambda_por_hora);
         this.poissonGenerators.set(upaName, generator);
 
-        // Cria fila de prioridade para atendimentos
         this.atendimentoQueues.set(upaName, new PriorityQueue());
 
         const rateInfo = generator.getRateInfo();
@@ -102,9 +88,6 @@ export class UPASimulator {
     console.log(`Distribuição Manchester: VERDE=${(dist.VERDE * 100).toFixed(0)}%, AMARELO=${(dist.AMARELO * 100).toFixed(0)}%, VERMELHO=${(dist.VERMELHO * 100).toFixed(0)}%, AZUL=${(dist.AZUL * 100).toFixed(0)}%\n`);
   }
 
-  /**
-   * Busca UPAs da API
-   */
   private async fetchUPAs(): Promise<void> {
     const response = await this.gatewayClient.get<{ data: any[] }>(
       this.config.gateway_service.endpoints.upas
@@ -123,7 +106,6 @@ export class UPASimulator {
         continue;
       }
 
-      // Usa a mesma distribuição para todas as UPAs
       this.upas.set(upaName, {
         name: upaName,
         id: upa.id,
@@ -133,31 +115,21 @@ export class UPASimulator {
     }
   }
 
-  /**
-   * Inicia a simulação
-   */
   start(): void {
     this.running = true;
     console.log('Simulação iniciada! (Ctrl+C para parar)\n');
 
-    // Inicia loop de chegadas e processador de atendimentos para cada UPA
     for (const [upaName, upaConfig] of this.upas) {
       this.runUPALoop(upaName, upaConfig);
       this.runAtendimentoProcessor(upaName);
     }
   }
 
-  /**
-   * Para a simulação
-   */
   stop(): void {
     this.running = false;
     console.log('\nSimulação parada');
   }
 
-  /**
-   * Loop principal de uma UPA
-   */
   private async runUPALoop(upaName: string, upaConfig: UPAConfig): Promise<void> {
     const generator = this.poissonGenerators.get(upaName);
 
@@ -168,15 +140,12 @@ export class UPASimulator {
 
     while (this.running) {
       try {
-        // Gera intervalo usando processo Poisson
         const intervalSeconds = generator.getNextInterval();
 
-        // Aguarda o intervalo
         await this.sleep(intervalSeconds * 1000);
 
-        // Cria e processa paciente (NÃO-BLOQUEANTE - não aguarda finalização)
         const patient = this.createPatient(upaConfig);
-        this.processPatient(patient); // Executa em paralelo sem await
+        this.processPatient(patient);
 
       } catch (error) {
         console.error(`Erro no loop da ${upaName}:`, error);
@@ -185,16 +154,10 @@ export class UPASimulator {
     }
   }
 
-  /**
-   * Obtém timestamp no timezone de São Paulo no formato esperado pela API
-   * Formato: 2025-10-29T10:00:00 (sem millisegundos, sem timezone)
-   */
   private getBrazilTimestamp(): string {
     const now = new Date();
-    // Converte para o timezone de São Paulo (UTC-3)
     const brazilDate = new Date(now.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
 
-    // Formata no padrão esperado pela API
     const year = brazilDate.getFullYear();
     const month = String(brazilDate.getMonth() + 1).padStart(2, '0');
     const day = String(brazilDate.getDate()).padStart(2, '0');
@@ -205,9 +168,6 @@ export class UPASimulator {
     return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}`;
   }
 
-  /**
-   * Cria um novo paciente
-   */
   private createPatient(upaConfig: UPAConfig): Patient {
     const bairro = this.randomChoice(upaConfig.bairros);
     const classificacao = this.assignClassification(upaConfig.classificationDistribution);
@@ -222,27 +182,19 @@ export class UPASimulator {
     };
   }
 
-  /**
-   * Processa entrada e triagem do paciente, depois adiciona à fila de atendimento
-   */
   private async processPatient(patient: Patient): Promise<void> {
     try {
-      // 1. ENTRADA (registra imediatamente)
       await this.registerEntrada(patient);
       console.log(`[${patient.upaName}] Entrada: ${patient.patientId.substring(0, 8)} - ${patient.bairro}`);
 
-      // Espera mínima antes da triagem
       await this.sleep(this.MIN_WAIT_BEFORE_TRIAGEM_SECONDS * 1000);
 
-      // 2. TRIAGEM (registra APÓS a espera, quando realmente acontece)
       patient.triagemTimestamp = this.getBrazilTimestamp();
       await this.registerTriagem(patient);
       console.log(`[${patient.upaName}] Triagem: ${patient.patientId.substring(0, 8)} -> ${patient.classificacao}`);
 
-      // Tempo de triagem
       await this.sleep(this.TRIAGEM_TIME_SECONDS * 1000);
 
-      // 3. ADICIONA À FILA DE ATENDIMENTO (respeitando prioridade)
       const queue = this.atendimentoQueues.get(patient.upaName);
       if (queue) {
         queue.enqueue(patient);
@@ -254,9 +206,6 @@ export class UPASimulator {
     }
   }
 
-  /**
-   * Processador contínuo da fila de atendimento (respeita prioridade)
-   */
   private async runAtendimentoProcessor(upaName: string): Promise<void> {
     const queue = this.atendimentoQueues.get(upaName);
 
@@ -267,24 +216,19 @@ export class UPASimulator {
 
     while (this.running) {
       try {
-        // Verifica se há pacientes na fila
         if (!queue.isEmpty()) {
-          // Remove paciente com maior prioridade
           const patient = queue.dequeue();
 
           if (patient) {
-            // Registra atendimento
             patient.atendimentoTimestamp = this.getBrazilTimestamp();
             await this.registerAtendimento(patient);
             console.log(`[${patient.upaName}] Atendimento: ${patient.patientId.substring(0, 8)} [${patient.classificacao}]`);
 
-            // Tempo de atendimento
             await this.sleep(this.ATENDIMENTO_TIME_SECONDS * 1000);
 
             console.log(`[${patient.upaName}] Finalizado: ${patient.patientId.substring(0, 8)}\n`);
           }
         } else {
-          // Fila vazia, aguarda um pouco antes de verificar novamente
           await this.sleep(1000);
         }
       } catch (error) {
@@ -294,9 +238,6 @@ export class UPASimulator {
     }
   }
 
-  /**
-   * Registra entrada na API
-   */
   private async registerEntrada(patient: Patient): Promise<void> {
     const data = {
       patientId: patient.patientId,
@@ -311,9 +252,6 @@ export class UPASimulator {
     );
   }
 
-  /**
-   * Registra triagem na API
-   */
   private async registerTriagem(patient: Patient): Promise<void> {
     const data = {
       patientId: patient.patientId,
@@ -328,9 +266,6 @@ export class UPASimulator {
     );
   }
 
-  /**
-   * Registra atendimento na API
-   */
   private async registerAtendimento(patient: Patient): Promise<void> {
     const data = {
       patientId: patient.patientId,
@@ -344,9 +279,6 @@ export class UPASimulator {
     );
   }
 
-  /**
-   * Atribui classificação de Manchester baseada em distribuição probabilística
-   */
   private assignClassification(distribution: Record<ClassificacaoManchester, number>): ClassificacaoManchester {
     const rand = Math.random();
     let cumulative = 0;
@@ -361,16 +293,10 @@ export class UPASimulator {
     return 'VERDE';
   }
 
-  /**
-   * Escolhe elemento aleatório de um array
-   */
   private randomChoice<T>(array: T[]): T {
     return array[Math.floor(Math.random() * array.length)];
   }
 
-  /**
-   * Helper para sleep
-   */
   private sleep(ms: number): Promise<void> {
     return new Promise(resolve => setTimeout(resolve, ms));
   }

@@ -1,9 +1,6 @@
 import axios, { AxiosInstance } from 'axios';
 import { AuthConfig, AuthResponse } from './types';
 
-/**
- * Cliente HTTP com suporte a autenticação JWT
- */
 export class APIClient {
   private client: AxiosInstance;
   private baseUrl: string;
@@ -22,7 +19,6 @@ export class APIClient {
       }
     });
 
-    // Interceptor para adicionar token automaticamente
     this.client.interceptors.request.use(async (config) => {
       if (this.authConfig && config.url !== this.authConfig.endpoints.login) {
         await this.ensureAuthenticated();
@@ -34,35 +30,26 @@ export class APIClient {
     });
   }
 
-  /**
-   * Garante que o cliente está autenticado com token válido
-   */
   private async ensureAuthenticated(): Promise<void> {
     if (!this.authConfig) return;
 
     const now = Date.now();
 
-    // Se não tem token, faz login inicial
     if (!this.token || !this.tokenExpiration) {
       await this.login();
       return;
     }
 
-    // Se o token está expirando em menos de 5 minutos, tenta refresh
-    if (this.tokenExpiration - now < 300000) { // 5 minutos
+    if (this.tokenExpiration - now < 300000) {
       try {
         await this.refreshToken();
       } catch (error) {
-        // Se refresh falhar, faz login novamente
         console.warn('[AUTH] Refresh token falhou, fazendo login novamente');
         await this.login();
       }
     }
   }
 
-  /**
-   * Realiza login e obtém token JWT
-   */
   private async login(): Promise<void> {
     if (!this.authConfig) return;
 
@@ -75,7 +62,6 @@ export class APIClient {
 
       if (response.data?.data?.token) {
         this.token = response.data.data.token;
-        // Define expiração (ou usa 24h como padrão se não vier no response)
         const expiresInMs = (response.data.data.expiresIn || 86400) * 1000;
         this.tokenExpiration = Date.now() + expiresInMs;
 
@@ -88,9 +74,6 @@ export class APIClient {
     }
   }
 
-  /**
-   * Renova o token JWT usando refresh token
-   */
   private async refreshToken(): Promise<void> {
     if (!this.authConfig || !this.token) return;
 

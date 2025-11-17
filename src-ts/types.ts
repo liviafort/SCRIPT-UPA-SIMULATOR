@@ -1,5 +1,3 @@
-// Tipos do simulador simplificado
-
 export type ClassificacaoManchester = 'VERMELHO' | 'AMARELO' | 'VERDE' | 'AZUL';
 
 export interface Patient {
