@@ -12,7 +12,7 @@ RUN npm ci --only=production && \
     npm install -D typescript @types/node
 
 # Copiar código fonte TypeScript
-COPY src-ts/ ./src-ts/
+COPY src/ ./src/
 
 # Compilar TypeScript
 RUN npm run build

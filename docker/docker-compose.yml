@@ -6,7 +6,7 @@ services:
       context: ..
       dockerfile: docker/Dockerfile
     image: upa-simulator:typescript
-    container_name: upa-simulator-ts
+    container_name: upa-simulator
     restart: unless-stopped
 
     logging:
