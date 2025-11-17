@@ -303,7 +303,3 @@ const lambda = baseLambda * adjustmentFactor;
 ```
 
 Este modelo captura tanto variações intra-dia (horas de pico) quanto inter-dia (padrões semanais).
-
-## Licença
-
-MIT
