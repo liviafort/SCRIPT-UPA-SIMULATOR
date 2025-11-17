@@ -36,24 +36,29 @@ Os parâmetros calculados incluem:
 
 ### Processo de Poisson Não-Homogêneo
 
-O simulador utiliza um **Processo de Poisson Não-Homogêneo** para gerar chegadas de pacientes, onde a taxa λ varia ao longo do dia:
+O simulador utiliza um **Processo de Poisson Não-Homogêneo** para gerar chegadas de pacientes, onde a taxa λ varia ao longo do dia e da semana:
 
-- **Taxa variável**: Cada hora possui um λ diferente, refletindo padrões reais de demanda
+- **Taxa variável por hora**: Cada hora do dia possui um λ diferente, refletindo padrões reais de demanda
+- **Taxa variável por dia da semana**: Ajuste adicional baseado no dia (Segunda tem 23% mais pacientes que Domingo)
 - **Distribuição exponencial**: Intervalos entre chegadas seguem distribuição exponencial com parâmetro λ(t)
-- **Baseado em dados reais**: Os valores de λ foram extraídos de dados históricos das UPAs
+- **Baseado em dados reais**: Os valores de λ foram extraídos de dados históricos de 396 dias das UPAs
 
 Exemplo de variação de λ (UPA Dinamérica):
-- Madrugada (3h-4h): λ ≈ 2.9 pacientes/hora
-- Pico manhã (8h-9h): λ ≈ 24.3 pacientes/hora
-- Noite (23h): λ ≈ 8.1 pacientes/hora
+- **Segunda-feira, 9h**: λ ≈ 30.1 pac/h (hora de pico + dia movimentado)
+- **Terça-feira, 9h**: λ ≈ 25.6 pac/h (hora de pico + dia médio)
+- **Domingo, 9h**: λ ≈ 18.2 pac/h (hora de pico + dia calmo)
+- **Madrugada (3h-4h)**: λ ≈ 2.9 pac/h (horário de menor movimento)
+
+O simulador calcula: **λ_final = λ_hora × (λ_dia_semana / λ_média)**
 
 ### Código do Simulador
 
-Estrutura do código TypeScript em `src-ts/`:
+Estrutura do código TypeScript em `src/`:
 
 #### `poisson-generator.ts`
 Implementa o gerador de chegadas usando processo de Poisson:
-- Seleciona λ apropriado baseado na hora atual
+- Seleciona λ apropriado baseado na hora atual e dia da semana
+- Aplica fator de ajuste por dia da semana aos lambdas horários
 - Gera intervalos entre chegadas usando transformação inversa: `-ln(U) / λ`
 - Converte taxa de pacientes/hora para pacientes/segundo
 
@@ -212,8 +217,11 @@ Iniciando UPA Simulator - Versão Simplificada
 Protocolo de Manchester | Processo de Poisson
 
 [DEBUG] Configurando UPA Dinamérica:
+  -> Mapeado para: Dinamerica
   -> Lambda médio: 14.74 pac/h
-  -> Lambda atual (hora 9h): 24.32 pac/h
+  -> Total horas no array: 24
+  -> Dia: Ter | Hora 9h
+  -> Lambda ajustado: 25.64 pac/h (fator: 1.05)
 
 [UPA Dinamérica] Entrada: a1b2c3d4 - Alto Branco
 [UPA Dinamérica] Triagem: a1b2c3d4 -> AMARELO
@@ -225,8 +233,9 @@ Protocolo de Manchester | Processo de Poisson
 ## Características do Simulador
 
 ### Realismo
-- Taxas de chegada baseadas em dados históricos reais
-- Variação ao longo do dia e semana
+- Taxas de chegada baseadas em dados históricos reais de 396 dias
+- Variação ao longo do dia (24 lambdas diferentes) e semana (7 dias)
+- Ajuste combinado: hora do dia × dia da semana
 - Distribuição de classificações de Manchester realista
 - Tempos de espera e atendimento configuráveis
 
@@ -260,7 +269,7 @@ Protocolo de Manchester | Processo de Poisson
 ├── config/                  # Configurações
 │   ├── config.example.json
 │   └── config.json (não versionado)
-├── src-ts/                  # Código TypeScript
+├── src/                     # Código TypeScript
 │   ├── index.ts
 │   ├── poisson-generator.ts
 │   ├── upa-simulator.ts
@@ -270,3 +279,31 @@ Protocolo de Manchester | Processo de Poisson
 ├── dist/                    # Código compilado
 └── package.json
 ```
+
+## Detalhes da Implementação
+
+### Cálculo do Lambda Ajustado
+
+O simulador utiliza um algoritmo de ajuste duplo para máximo realismo:
+
+```typescript
+// 1. Obtém lambda base da hora atual (ex: 9h = 24.32 pac/h)
+const baseLambda = lambdasPorHora[hour];
+
+// 2. Obtém estatísticas do dia da semana (ex: Terça)
+const dayStats = params.dias_semana['Ter'];
+
+// 3. Calcula fator de ajuste
+const adjustmentFactor = dayStats.lambda_hora / params.lambda_hora_media;
+// Terça: 15.54 / 14.74 = 1.054 (5.4% acima da média)
+
+// 4. Lambda final ajustado
+const lambda = baseLambda * adjustmentFactor;
+// 24.32 × 1.054 = 25.64 pac/h
+```
+
+Este modelo captura tanto variações intra-dia (horas de pico) quanto inter-dia (padrões semanais).
+
+## Licença
+
+MIT

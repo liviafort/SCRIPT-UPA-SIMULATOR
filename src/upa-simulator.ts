@@ -31,7 +31,6 @@ export class UPASimulator {
     this.monitoringClient = new APIClient(config.monitoring_service.base_url, config.auth);
     this.gatewayClient = new APIClient(config.gateway_service.base_url);
 
-    // Carrega configurações da simulação
     this.CLASSIFICATION_DISTRIBUTION = config.simulation.classification_distribution;
     this.TRIAGEM_TIME_SECONDS = config.simulation.triagem_time_minutes * 60;
     this.ATENDIMENTO_TIME_SECONDS = config.simulation.atendimento_time_minutes * 60;
@@ -69,13 +68,14 @@ export class UPASimulator {
         console.log(`  -> Lambda médio: ${params.lambda_hora_media.toFixed(2)} pac/h`);
         console.log(`  -> Total horas no array: ${params.lambda_por_hora.length}`);
 
-        const generator = new PoissonGenerator(params.lambda_por_hora);
+        const generator = new PoissonGenerator(params);
         this.poissonGenerators.set(upaName, generator);
 
         this.atendimentoQueues.set(upaName, new PriorityQueue());
 
         const rateInfo = generator.getRateInfo();
-        console.log(`  -> Lambda atual (hora ${rateInfo.hour}h): ${rateInfo.lambda.toFixed(2)} pac/h`);
+        console.log(`  -> Dia: ${rateInfo.dayOfWeek} | Hora ${rateInfo.hour}h`);
+        console.log(`  -> Lambda ajustado: ${rateInfo.lambda.toFixed(2)} pac/h (fator: ${rateInfo.adjustmentFactor.toFixed(2)})`);
       }
     }
 

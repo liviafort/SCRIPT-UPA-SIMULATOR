@@ -24,11 +24,26 @@ export interface LambdaPorHora {
   Percentual: number;
 }
 
+export interface DiaSemanaStats {
+  media: number;
+  std: number;
+  lambda_hora: number;
+}
+
 export interface UPAParams {
   lambda_hora_media: number;
   lambda_dia: number;
   lambda_por_hora: LambdaPorHora[];
   tempo_entre_chegadas_minutos: number;
+  dias_semana: {
+    Seg: DiaSemanaStats;
+    Ter: DiaSemanaStats;
+    Qua: DiaSemanaStats;
+    Qui: DiaSemanaStats;
+    Sex: DiaSemanaStats;
+    Sáb: DiaSemanaStats;
+    Dom: DiaSemanaStats;
+  };
 }
 
 export interface AuthConfig {
