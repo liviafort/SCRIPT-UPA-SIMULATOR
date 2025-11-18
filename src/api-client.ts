@@ -103,10 +103,37 @@ export class APIClient {
     }
   }
 
+  private async retryWithBackoff<T>(
+    operation: () => Promise<T>,
+    maxRetries: number = 3,
+    baseDelay: number = 100
+  ): Promise<T | null> {
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        return await operation();
+      } catch (error: any) {
+        const isLastAttempt = attempt === maxRetries;
+        const isDNSError = error?.code === 'EAI_AGAIN' || error?.code === 'ENOTFOUND';
+        const isNetworkError = error?.code === 'ECONNRESET' || error?.code === 'ETIMEDOUT';
+
+        if (isLastAttempt || (!isDNSError && !isNetworkError)) {
+          throw error;
+        }
+
+        const delay = baseDelay * Math.pow(2, attempt) + Math.random() * 100;
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+    return null;
+  }
+
   async get<T = any>(endpoint: string): Promise<T | null> {
     try {
-      const response = await this.client.get<T>(endpoint);
-      return response.data;
+      const result = await this.retryWithBackoff(async () => {
+        const response = await this.client.get<T>(endpoint);
+        return response.data;
+      });
+      return result;
     } catch (error) {
       console.error(`[API ERROR] GET ${this.baseUrl}${endpoint}:`, error instanceof Error ? error.message : error);
       return null;
@@ -115,8 +142,11 @@ export class APIClient {
 
   async post<T = any>(endpoint: string, data: any): Promise<T | null> {
     try {
-      const response = await this.client.post<T>(endpoint, data);
-      return response.data;
+      const result = await this.retryWithBackoff(async () => {
+        const response = await this.client.post<T>(endpoint, data);
+        return response.data;
+      });
+      return result;
     } catch (error) {
       console.error(`[API ERROR] POST ${this.baseUrl}${endpoint}:`, error instanceof Error ? error.message : error);
       return null;
