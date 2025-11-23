@@ -41,9 +41,6 @@ logs/
 
 .ipynb_checkpoints
 
-# Claude Code
-.claude/
-
 # Configuração real (não vai pro git)
 config/config.json
 
